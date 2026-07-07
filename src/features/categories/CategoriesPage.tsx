@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, FolderOpen, MoreHorizontal, Edit, Trash2, FileText, Sparkles, ArrowRight } from 'lucide-react'
-import { useApp } from '../../contexts/AppContext'
-import Button from '../../components/ui/Button'
-import Card from '../../components/ui/Card'
-import Modal from '../../components/ui/Modal'
+import { useApp } from '@/shared/context/AppContext'
+import Button from '@/shared/ui/Button'
+import Card from '@/shared/ui/Card'
+import Modal from '@/shared/ui/Modal'
 
 export default function CategoriesPage() {
   const { categories, deleteCategory } = useApp()

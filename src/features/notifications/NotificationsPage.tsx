@@ -1,8 +1,8 @@
 import { CheckCircle, Bell, Upload, Clock, AlertCircle, Info, Check } from 'lucide-react'
-import { useApp } from '../../contexts/AppContext'
-import type { Notification } from '../../types'
-import Card from '../../components/ui/Card'
-import Button from '../../components/ui/Button'
+import { useApp } from '@/shared/context/AppContext'
+import type { Notification } from '@/types'
+import Card from '@/shared/ui/Card'
+import Button from '@/shared/ui/Button'
 
 const typeConfig: Record<Notification['type'], { icon: React.ElementType; color: string; bg: string }> = {
   completed: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100' },

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CheckSquare, ArrowRight, ArrowLeft, Sparkles } from 'lucide-react'
-import { useAuth } from '../../contexts/AuthContext'
-import Button from '../../components/ui/Button'
-import Input from '../../components/ui/Input'
-import Select from '../../components/ui/Select'
+import { CheckSquare, ArrowRight, ArrowLeft } from 'lucide-react'
+import { useAuth } from '@/shared/context/AuthContext'
+import Button from '@/shared/ui/Button'
+import Input from '@/shared/ui/Input'
+import Select from '@/shared/ui/Select'
 
 const countries = [
   { value: 'Rwanda', label: 'Rwanda' },

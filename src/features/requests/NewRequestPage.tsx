@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send, MessageSquare, CheckCircle, Copy, Phone, Mail, Sparkles } from 'lucide-react'
-import { useApp } from '../../contexts/AppContext'
-import { useAuth } from '../../contexts/AuthContext'
-import type { ClientRequest, Client } from '../../types'
-import Button from '../../components/ui/Button'
-import Input from '../../components/ui/Input'
-import Select from '../../components/ui/Select'
-import Textarea from '../../components/ui/Textarea'
-import Card from '../../components/ui/Card'
+import { useApp } from '@/shared/context/AppContext'
+import { useAuth } from '@/shared/context/AuthContext'
+import type { ClientRequest, Client } from '@/types'
+import Button from '@/shared/ui/Button'
+import Input from '@/shared/ui/Input'
+import Select from '@/shared/ui/Select'
+import Textarea from '@/shared/ui/Textarea'
+import Card from '@/shared/ui/Card'
 
 function generateToken() {
   return 'tok_' + Math.random().toString(36).slice(2, 14)

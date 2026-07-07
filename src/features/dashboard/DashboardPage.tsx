@@ -8,13 +8,13 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
-import { useAuth } from '../../contexts/AuthContext'
-import { useApp } from '../../contexts/AppContext'
-import { dashboardStats, weeklyData, categoryDistribution } from '../../data/mockData'
-import type { RequestStatus } from '../../types'
-import Card from '../../components/ui/Card'
-import Badge from '../../components/ui/Badge'
-import Button from '../../components/ui/Button'
+import { useAuth } from '@/shared/context/AuthContext'
+import { useApp } from '@/shared/context/AppContext'
+import { dashboardStats, weeklyData, categoryDistribution } from '@/data/mockData'
+import type { RequestStatus } from '@/types'
+import Card from '@/shared/ui/Card'
+import Badge from '@/shared/ui/Badge'
+import Button from '@/shared/ui/Button'
 
 const statusVariant = (status: RequestStatus) => {
   if (status === 'submitted' || status === 'reviewed') return 'success' as const

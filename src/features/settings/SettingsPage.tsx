@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Building, Users, Shield, Bell, Database, Palette, Save, Plus, Trash2, CheckCircle } from 'lucide-react'
 import { clsx } from 'clsx'
-import { useAuth } from '../../contexts/AuthContext'
-import { mockUsers } from '../../data/mockData'
-import Button from '../../components/ui/Button'
-import Input from '../../components/ui/Input'
-import Select from '../../components/ui/Select'
-import Card from '../../components/ui/Card'
-import Badge from '../../components/ui/Badge'
+import { useAuth } from '@/shared/context/AuthContext'
+import { mockUsers } from '@/data/mockData'
+import Button from '@/shared/ui/Button'
+import Input from '@/shared/ui/Input'
+import Select from '@/shared/ui/Select'
+import Card from '@/shared/ui/Card'
+import Badge from '@/shared/ui/Badge'
 
 const tabs = [
   { id: 'org', label: 'Organization', icon: Building },

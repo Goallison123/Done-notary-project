@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Users, Phone, Mail, FileText, ChevronRight, Filter, Sparkles } from 'lucide-react'
-import { useApp } from '../../contexts/AppContext'
-import Input from '../../components/ui/Input'
-import Badge from '../../components/ui/Badge'
-import Card from '../../components/ui/Card'
-import Button from '../../components/ui/Button'
+import { useApp } from '@/shared/context/AppContext'
+import Input from '@/shared/ui/Input'
+import Badge from '@/shared/ui/Badge'
+import Card from '@/shared/ui/Card'
+import Button from '@/shared/ui/Button'
 
 export default function ClientsPage() {
   const { clients, requests } = useApp()

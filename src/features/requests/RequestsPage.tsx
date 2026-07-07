@@ -5,12 +5,12 @@ import {
   Clock, CheckCircle, XCircle, AlertCircle, Eye,
   Filter, ChevronRight,
 } from 'lucide-react'
-import { useApp } from '../../contexts/AppContext'
-import type { RequestStatus } from '../../types'
-import Button from '../../components/ui/Button'
-import Badge from '../../components/ui/Badge'
-import Input from '../../components/ui/Input'
-import Card from '../../components/ui/Card'
+import { useApp } from '@/shared/context/AppContext'
+import type { RequestStatus } from '@/types'
+import Button from '@/shared/ui/Button'
+import Badge from '@/shared/ui/Badge'
+import Input from '@/shared/ui/Input'
+import Card from '@/shared/ui/Card'
 
 const statusConfig: Record<RequestStatus, { variant: 'success' | 'pending' | 'danger' | 'info' | 'muted'; icon: React.ElementType; label: string; dotColor: string }> = {
   pending: { variant: 'pending', icon: Clock, label: 'Pending', dotColor: 'bg-amber-400' },

@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Activity, Search, Shield, Eye, FileText, User, Folder, Download, Filter } from 'lucide-react'
-import { useApp } from '../../contexts/AppContext'
-import type { ActivityLog } from '../../types'
-import Input from '../../components/ui/Input'
-import Card from '../../components/ui/Card'
-import Badge from '../../components/ui/Badge'
-import Button from '../../components/ui/Button'
+import { useApp } from '@/shared/context/AppContext'
+import type { ActivityLog } from '@/types'
+import Input from '@/shared/ui/Input'
+import Card from '@/shared/ui/Card'
+import Badge from '@/shared/ui/Badge'
+import Button from '@/shared/ui/Button'
 
 const actionConfig: Record<ActivityLog['action'], { label: string; color: string; bg: string }> = {
   created: { label: 'Created', color: 'text-blue-700', bg: 'bg-blue-100' },

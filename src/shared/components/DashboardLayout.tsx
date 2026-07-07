@@ -6,9 +6,9 @@ import {
   CheckSquare, Plus, ChevronDown, Sparkles,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { useAuth } from '../../contexts/AuthContext'
-import { useApp } from '../../contexts/AppContext'
-import GlobalSearch from '../shared/GlobalSearch'
+import { useAuth } from '@/shared/context/AuthContext'
+import { useApp } from '@/shared/context/AppContext'
+import GlobalSearch from './GlobalSearch'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -235,7 +235,7 @@ export default function DashboardLayout() {
             <Search size={15} className="opacity-60" />
             <span className="flex-1 text-left text-[13px]">Search clients, requests...</span>
             <kbd className="hidden md:flex text-[10px] bg-white border border-brand-200 text-brand-500 px-2 py-1 rounded-lg font-mono shadow-sm">
-              ⌘K
+              Cmd+K
             </kbd>
           </button>
         </header>

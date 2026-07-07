@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CheckSquare, Mail, Lock, Eye, EyeOff, ArrowRight, Sparkles } from 'lucide-react'
-import { useAuth } from '../../contexts/AuthContext'
-import Button from '../../components/ui/Button'
-import Input from '../../components/ui/Input'
+import { useAuth } from '@/shared/context/AuthContext'
+import Button from '@/shared/ui/Button'
+import Input from '@/shared/ui/Input'
 
 export default function LoginPage() {
   const { login } = useAuth()
