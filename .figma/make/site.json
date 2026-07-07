@@ -1,0 +1,10 @@
+{
+  "description": "Streamlines client intake and records management for professional offices by digitizing forms, secure submissions, and organized permanent records.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
