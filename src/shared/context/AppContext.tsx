@@ -1,72 +1,233 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
-import type { Client, ClientRequest, Category, ActivityLog, Notification } from '@/types'
-import { mockClients, mockRequests, mockCategories, mockActivityLogs, mockNotifications } from '@/data/mockData'
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { supabase } from '@/lib/supabase'
+import type { Client, Category, ActivityLog, Notification, CheckIn, ServiceType, RwandaLocation } from '@/types'
+import { useAuth } from './AuthContext'
 
 interface AppContextValue {
   clients: Client[]
-  requests: ClientRequest[]
+  checkIns: CheckIn[]
   categories: Category[]
   activityLogs: ActivityLog[]
   notifications: Notification[]
+  serviceTypes: ServiceType[]
+  locations: RwandaLocation[]
   unreadCount: number
-  addRequest: (req: ClientRequest) => void
-  updateRequest: (id: string, updates: Partial<ClientRequest>) => void
-  addCategory: (cat: Category) => void
-  updateCategory: (id: string, updates: Partial<Category>) => void
-  deleteCategory: (id: string) => void
+  loading: boolean
+  refreshClients: () => Promise<void>
+  refreshCheckIns: () => Promise<void>
+  refreshActivityLogs: () => Promise<void>
+  addCheckIn: (checkIn: Partial<CheckIn>) => Promise<{ success: boolean; error?: string }>
   markNotificationRead: (id: string) => void
   markAllNotificationsRead: () => void
-  addClient: (client: Client) => void
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [clients, setClients] = useState<Client[]>(mockClients)
-  const [requests, setRequests] = useState<ClientRequest[]>(mockRequests)
-  const [categories, setCategories] = useState<Category[]>(mockCategories)
-  const [activityLogs] = useState<ActivityLog[]>(mockActivityLogs)
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications)
+  const { org, userProfile } = useAuth()
+  const [clients, setClients] = useState<Client[]>([])
+  const [checkIns, setCheckIns] = useState<CheckIn[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])
+  const [locations, setLocations] = useState<RwandaLocation[]>([])
+  const [loading, setLoading] = useState(true)
 
   const unreadCount = notifications.filter(n => !n.read).length
 
-  const addRequest = (req: ClientRequest) => {
-    setRequests(prev => [req, ...prev])
-  }
+  // Load reference data (service types, locations) once
+  useEffect(() => {
+    const loadReferenceData = async () => {
+      const [{ data: services }, { data: locs }] = await Promise.all([
+        supabase.from('service_types').select('*').eq('is_active', true).order('sort_order'),
+        supabase.from('rwanda_locations').select('*'),
+      ])
+      if (services) setServiceTypes(services as ServiceType[])
+      if (locs) setLocations(locs as RwandaLocation[])
+    }
+    loadReferenceData()
+  }, [])
 
-  const updateRequest = (id: string, updates: Partial<ClientRequest>) => {
-    setRequests(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r))
-  }
+  // Load org-specific data when org changes
+  useEffect(() => {
+    if (!org?.id) {
+      setLoading(false)
+      return
+    }
 
-  const addCategory = (cat: Category) => {
-    setCategories(prev => [cat, ...prev])
-  }
+    const loadData = async () => {
+      setLoading(true)
 
-  const updateCategory = (id: string, updates: Partial<Category>) => {
-    setCategories(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
-  }
+      const [{ data: clientsData }, { data: checkInsData }, { data: auditData }] = await Promise.all([
+        supabase.from('clients').select('*').eq('organization_id', org.id).order('created_at', { ascending: false }),
+        supabase.from('check_ins').select('*').eq('organization_id', org.id).order('created_at', { ascending: false }).limit(50),
+        supabase.from('audit_logs').select('*').eq('organization_id', org.id).order('created_at', { ascending: false }).limit(100),
+      ])
 
-  const deleteCategory = (id: string) => {
-    setCategories(prev => prev.filter(c => c.id !== id))
-  }
+      if (clientsData) {
+        setClients(clientsData.map((c: Record<string, unknown>) => ({
+          id: c.id as string,
+          name: c.full_name as string,
+          phone: c.phone as string,
+          email: c.email as string | undefined,
+          nationalId: c.national_id as string | undefined,
+          address: c.address as string | undefined,
+          country: 'Rwanda',
+          orgId: c.organization_id as string,
+          createdAt: c.created_at as string,
+          updatedAt: c.updated_at as string,
+        })))
+      }
 
-  const markNotificationRead = (id: string) => {
+      if (checkInsData) {
+        setCheckIns(checkInsData.map((c: Record<string, unknown>) => ({
+          id: c.id as string,
+          organization_id: c.organization_id as string,
+          token_id: c.token_id as string,
+          sequence_number: c.sequence_number as number,
+          client_name: c.client_name as string,
+          client_phone: c.client_phone as string,
+          client_national_id: c.national_id as string | undefined,
+          service_type_id: c.service_type_id as string | undefined,
+          signature_svg: c.signature_svg as string | undefined,
+          record_hash: c.record_hash as string | undefined,
+          status: c.status as 'in_progress' | 'submitted' | 'signed' | 'ready' | 'called' | 'archived',
+          check_in_time: c.check_in_at as string | undefined,
+          completion_time: c.submitted_at as string | undefined,
+          created_at: c.created_at as string,
+          updated_at: c.updated_at as string,
+        })))
+      }
+
+      if (auditData) {
+        setActivityLogs(auditData.map((a: Record<string, unknown>) => ({
+          id: a.id as string,
+          action: a.action as 'created' | 'edited' | 'viewed' | 'submitted' | 'downloaded' | 'expired' | 'deleted' | 'login',
+          entityType: a.entity_type as 'request' | 'client' | 'category' | 'document' | 'user' | 'organization',
+          entityId: a.entity_id as string,
+          entityName: (a.client_name as string) || (a.user_name as string) || 'Unknown',
+          userId: (a.user_id as string) || '',
+          userName: (a.user_name as string) || 'System',
+          ipAddress: (a.ip_address as string) || '',
+          timestamp: a.created_at as string,
+        })))
+      }
+
+      setLoading(false)
+    }
+
+    loadData()
+  }, [org?.id])
+
+  const refreshClients = useCallback(async () => {
+    if (!org?.id) return
+    const { data } = await supabase.from('clients').select('*').eq('organization_id', org.id).order('created_at', { ascending: false })
+    if (data) {
+      setClients(data.map((c: Record<string, unknown>) => ({
+        id: c.id as string,
+        name: c.full_name as string,
+        phone: c.phone as string,
+        email: c.email as string | undefined,
+        nationalId: c.national_id as string | undefined,
+        address: c.address as string | undefined,
+        country: 'Rwanda',
+        orgId: c.organization_id as string,
+        createdAt: c.created_at as string,
+        updatedAt: c.updated_at as string,
+      })))
+    }
+  }, [org?.id])
+
+  const refreshCheckIns = useCallback(async () => {
+    if (!org?.id) return
+    const { data } = await supabase.from('check_ins').select('*').eq('organization_id', org.id).order('created_at', { ascending: false }).limit(50)
+    if (data) {
+      setCheckIns(data.map((c: Record<string, unknown>) => ({
+        id: c.id as string,
+        organization_id: c.organization_id as string,
+        token_id: c.token_id as string,
+        sequence_number: c.sequence_number as number,
+        client_name: c.client_name as string,
+        client_phone: c.client_phone as string,
+        client_national_id: c.national_id as string | undefined,
+        service_type_id: c.service_type_id as string | undefined,
+        signature_svg: c.signature_svg as string | undefined,
+        record_hash: c.record_hash as string | undefined,
+        status: c.status as 'in_progress' | 'submitted' | 'signed' | 'ready' | 'called' | 'archived',
+        check_in_time: c.check_in_at as string | undefined,
+        completion_time: c.submitted_at as string | undefined,
+        created_at: c.created_at as string,
+        updated_at: c.updated_at as string,
+      })))
+    }
+  }, [org?.id])
+
+  const refreshActivityLogs = useCallback(async () => {
+    if (!org?.id) return
+    const { data } = await supabase.from('audit_logs').select('*').eq('organization_id', org.id).order('created_at', { ascending: false }).limit(100)
+    if (data) {
+      setActivityLogs(data.map((a: Record<string, unknown>) => ({
+        id: a.id as string,
+        action: a.action as 'created' | 'edited' | 'viewed' | 'submitted' | 'downloaded' | 'expired' | 'deleted' | 'login',
+        entityType: a.entity_type as 'request' | 'client' | 'category' | 'document' | 'user' | 'organization',
+        entityId: a.entity_id as string,
+        entityName: (a.client_name as string) || (a.user_name as string) || 'Unknown',
+        userId: (a.user_id as string) || '',
+        userName: (a.user_name as string) || 'System',
+        ipAddress: (a.ip_address as string) || '',
+        timestamp: a.created_at as string,
+      })))
+    }
+  }, [org?.id])
+
+  const addCheckIn = useCallback(async (checkIn: Partial<CheckIn>): Promise<{ success: boolean; error?: string }> => {
+    if (!org?.id || !userProfile?.id) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    try {
+      const { error } = await supabase.from('check_ins').insert({
+        organization_id: org.id,
+        ...checkIn,
+      })
+
+      if (error) {
+        return { success: false, error: error.message }
+      }
+
+      await refreshCheckIns()
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: 'An unexpected error occurred' }
+    }
+  }, [org?.id, userProfile?.id, refreshCheckIns])
+
+  const markNotificationRead = useCallback((id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
-  }
+  }, [])
 
-  const markAllNotificationsRead = () => {
+  const markAllNotificationsRead = useCallback(() => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-  }
-
-  const addClient = (client: Client) => {
-    setClients(prev => [client, ...prev])
-  }
+  }, [])
 
   return (
     <AppContext.Provider value={{
-      clients, requests, categories, activityLogs, notifications,
-      unreadCount, addRequest, updateRequest, addCategory, updateCategory,
-      deleteCategory, markNotificationRead, markAllNotificationsRead, addClient,
+      clients,
+      checkIns,
+      categories,
+      activityLogs,
+      notifications,
+      serviceTypes,
+      locations,
+      unreadCount,
+      loading,
+      refreshClients,
+      refreshCheckIns,
+      refreshActivityLogs,
+      addCheckIn,
+      markNotificationRead,
+      markAllNotificationsRead,
     }}>
       {children}
     </AppContext.Provider>

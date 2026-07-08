@@ -8,8 +8,8 @@ import Input from '@/shared/ui/Input'
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('amara@kigalinotary.rw')
-  const [password, setPassword] = useState('password')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -18,21 +18,22 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    try {
-      await login(email, password)
+
+    const result = await login(email, password)
+
+    if (result.success) {
       navigate('/dashboard')
-    } catch {
-      setError('Invalid credentials. Please try again.')
-    } finally {
-      setLoading(false)
+    } else {
+      setError(result.error || 'Invalid credentials. Please try again.')
     }
+
+    setLoading(false)
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-brand-50/50 flex">
       {/* Left panel */}
       <div className="hidden lg:flex flex-col justify-between w-[480px] bg-gradient-to-br from-brand-900 via-brand-900 to-brand-800 p-12 text-white relative overflow-hidden">
-        {/* Background pattern */}
         <div className="absolute inset-0 opacity-5">
           <div className="absolute top-20 left-10 w-64 h-64 rounded-full bg-white/10 blur-3xl" />
           <div className="absolute bottom-20 right-10 w-96 h-96 rounded-full bg-teal-400/10 blur-3xl" />
@@ -56,10 +57,10 @@ export default function LoginPage() {
         </div>
         <div className="relative space-y-5">
           {[
-            { icon: Sparkles, label: 'End-to-end secure submissions' },
-            { icon: Mail, label: 'SMS-delivered client links' },
-            { icon: CheckSquare, label: 'Dynamic form builder' },
-            { icon: Lock, label: 'Digital signatures & document upload' },
+            { icon: Sparkles, label: 'QR Code check-in' },
+            { icon: Mail, label: 'Real-time queue management' },
+            { icon: CheckSquare, label: 'MINIJUST-compliant exports' },
+            { icon: Lock, label: 'Digital signatures & audit logs' },
           ].map(f => (
             <div key={f.label} className="flex items-center gap-4 text-base text-brand-300">
               <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
@@ -83,7 +84,7 @@ export default function LoginPage() {
 
           <div className="mb-10">
             <h2 className="text-3xl font-extrabold text-brand-900 tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Welcome back</h2>
-            <p className="text-base text-brand-500 mt-2">Sign in to your organization account</p>
+            <p className="text-base text-brand-500 mt-2">Sign in to your notary office account</p>
           </div>
 
           {error && (
@@ -98,7 +99,7 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="you@organization.rw"
+              placeholder="you@notaryoffice.rw"
               required
               prefix={<Mail size={16} />}
             />
@@ -130,14 +131,14 @@ export default function LoginPage() {
             <p className="text-sm text-brand-500">
               Don&apos;t have an account?{' '}
               <Link to="/register" className="text-blue-600 hover:text-blue-700 font-semibold">
-                Register your organization
+                Register your office
               </Link>
             </p>
           </div>
 
-          <div className="mt-8 p-4 rounded-xl bg-gradient-to-r from-brand-50 to-white border border-brand-100">
-            <p className="text-xs text-brand-500 font-semibold mb-1">Demo credentials</p>
-            <p className="text-sm text-brand-400 font-mono">amara@kigalinotary.rw / any password</p>
+          <div className="mt-8 p-4 rounded-xl bg-gradient-to-r from-blue-50 to-white border border-blue-100">
+            <p className="text-xs text-blue-600 font-semibold mb-1">Built by Bessora</p>
+            <p className="text-sm text-brand-500">Digital Notary Platform for Rwanda</p>
           </div>
         </div>
       </div>

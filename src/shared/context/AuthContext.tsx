@@ -1,14 +1,28 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { User, Organization } from '@/types'
-import { mockUsers, mockOrg } from '@/data/mockData'
+import type { Session, User as SupabaseUser } from '@supabase/supabase-js'
+
+interface UserProfile {
+  id: string
+  organization_id: string
+  name: string
+  role: 'owner' | 'administrator' | 'notary' | 'receptionist'
+  phone?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
 
 interface AuthContextValue {
   user: User | null
+  userProfile: UserProfile | null
   org: Organization | null
-  login: (email: string, password: string) => Promise<boolean>
-  logout: () => void
-  register: (data: RegisterData) => Promise<boolean>
+  session: Session | null
+  loading: boolean
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  logout: () => Promise<void>
+  register: (data: RegisterData) => Promise<{ success: boolean; error?: string }>
   refreshSubscription: () => Promise<void>
   isSubscriptionValid: () => boolean
 }
@@ -24,45 +38,122 @@ interface RegisterData {
   orgCountry: string
 }
 
+const DEMO_ORG_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('done_user')
-    return saved ? JSON.parse(saved) : null
-  })
-  const [org, setOrg] = useState<Organization | null>(() => {
-    const saved = localStorage.getItem('done_org')
-    return saved ? JSON.parse(saved) : mockOrg
-  })
+  const [session, setSession] = useState<Session | null>(null)
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [org, setOrg] = useState<Organization | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const refreshSubscription = async () => {
-    if (!org?.id) return
+  const user: User | null = session?.user ? {
+    id: session.user.id,
+    name: userProfile?.name || session.user.email?.split('@')[0] || 'User',
+    email: session.user.email || '',
+    role: userProfile?.role || 'viewer',
+    createdAt: session.user.created_at,
+  } : null
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      if (session?.user) {
+        fetchUserProfile(session.user.id)
+      } else {
+        setLoading(false)
+      }
+    })
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+      if (session?.user) {
+        fetchUserProfile(session.user.id)
+      } else {
+        setUserProfile(null)
+        setOrg(null)
+        setLoading(false)
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const fetchUserProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('subscription_expires_at, account_status, momopay_merchant_code, payment_phone')
-        .eq('id', org.id)
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
         .single()
 
-      if (!error && data) {
-        const updatedOrg = { ...org, ...data }
-        setOrg(updatedOrg)
-        localStorage.setItem('done_org', JSON.stringify(updatedOrg))
+      if (error) {
+        // User profile doesn't exist yet - use defaults for demo
+        const defaultProfile: UserProfile = {
+          id: userId,
+          organization_id: DEMO_ORG_ID,
+          name: 'Demo User',
+          role: 'owner',
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+        setUserProfile(defaultProfile)
+        await fetchOrganization(DEMO_ORG_ID)
+      } else {
+        setUserProfile(profile as UserProfile)
+        if (profile.organization_id) {
+          await fetchOrganization(profile.organization_id)
+        }
       }
     } catch (err) {
-      console.error('Failed to refresh subscription:', err)
+      console.error('Error fetching user profile:', err)
+      setLoading(false)
     }
   }
 
-  useEffect(() => {
-    if (org?.id && org.id !== mockOrg.id) {
-      refreshSubscription()
+  const fetchOrganization = async (orgId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('id', orgId)
+        .single()
+
+      if (!error && data) {
+        setOrg({
+          id: data.id,
+          name: data.name,
+          license_number: data.license_number,
+          phone: data.phone || '',
+          email: data.email || '',
+          address: data.address || '',
+          country: 'Rwanda',
+          subdomain: '',
+          createdAt: data.created_at,
+          subscription_expires_at: data.subscription_expires_at,
+          account_status: data.account_status,
+          momopay_merchant_code: data.momopay_merchant_code,
+          payment_phone: data.payment_phone,
+        } as Organization)
+      }
+    } catch (err) {
+      console.error('Error fetching organization:', err)
+    } finally {
+      setLoading(false)
     }
-  }, [org?.id])
+  }
+
+  const refreshSubscription = async () => {
+    if (!org?.id) return
+    await fetchOrganization(org.id)
+  }
 
   const isSubscriptionValid = (): boolean => {
-    if (!org) return false
+    if (!org) return true // Allow access if no org loaded yet
     if (org.account_status === 'active') return true
     if (org.account_status === 'trial' && org.subscription_expires_at) {
       return new Date(org.subscription_expires_at) > new Date()
@@ -70,64 +161,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (org.account_status === 'suspended' || org.account_status === 'cancelled') {
       return false
     }
-    // Default trial: valid for 14 days from first login
-    return true
+    return true // Allow access during loading or undefined state
   }
 
-  const login = async (email: string, _password: string): Promise<boolean> => {
-    await new Promise(r => setTimeout(r, 800))
-    const found = mockUsers.find(u => u.email === email)
-    if (found) {
-      setUser(found)
-      localStorage.setItem('done_user', JSON.stringify(found))
-      return true
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) {
+        return { success: false, error: error.message }
+      }
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: 'An unexpected error occurred' }
     }
-    // Allow any login for demo
-    const demoUser: User = { ...mockUsers[0], email, name: email.split('@')[0] }
-    setUser(demoUser)
-    localStorage.setItem('done_user', JSON.stringify(demoUser))
-    return true
   }
 
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem('done_user')
+  const logout = async () => {
+    await supabase.auth.signOut()
+    setUserProfile(null)
+    setOrg(null)
   }
 
-  const register = async (_data: RegisterData): Promise<boolean> => {
-    await new Promise(r => setTimeout(r, 1200))
-    const newUser: User = {
-      id: 'u_new',
-      name: _data.name,
-      email: _data.email,
-      role: 'owner',
-      createdAt: new Date().toISOString(),
-    }
-    setUser(newUser)
-    localStorage.setItem('done_user', JSON.stringify(newUser))
+  const register = async (data: RegisterData): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error: signUpError } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          data: { name: data.name },
+        },
+      })
 
-    // Set trial expiry to 14 days from now
-    const trialOrg: Organization = {
-      ...mockOrg,
-      id: `org_${Date.now()}`,
-      name: _data.orgName,
-      email: _data.orgEmail,
-      phone: _data.orgPhone,
-      address: _data.orgAddress,
-      country: _data.orgCountry,
-      account_status: 'trial',
-      subscription_expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-      trial_started_at: new Date().toISOString(),
-      momopay_merchant_code: '182845',
-      payment_phone: '+250 788 123 456',
+      if (signUpError) {
+        return { success: false, error: signUpError.message }
+      }
+
+      // Auth state change will handle the rest
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: 'An unexpected error occurred' }
     }
-    setOrg(trialOrg)
-    localStorage.setItem('done_org', JSON.stringify(trialOrg))
-    return true
   }
 
   return (
-    <AuthContext.Provider value={{ user, org, login, logout, register, refreshSubscription, isSubscriptionValid }}>
+    <AuthContext.Provider value={{
+      user,
+      userProfile,
+      org,
+      session,
+      loading,
+      login,
+      logout,
+      register,
+      refreshSubscription,
+      isSubscriptionValid,
+    }}>
       {children}
     </AuthContext.Provider>
   )

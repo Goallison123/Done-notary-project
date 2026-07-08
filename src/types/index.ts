@@ -18,14 +18,14 @@ export interface Organization {
   id: string
   name: string
   logo?: string
+  license_number?: string
   address: string
   phone: string
   email: string
   country: string
-  subdomain: string
+  subdomain?: string
   description?: string
   createdAt: string
-  // Subscription fields
   subscription_expires_at?: string
   trial_started_at?: string
   account_status?: 'trial' | 'active' | 'suspended' | 'cancelled'
