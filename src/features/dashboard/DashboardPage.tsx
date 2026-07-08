@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Users, FileText, CheckCircle, Upload, Plus,
   TrendingUp, Clock, ArrowUpRight, Zap, ArrowRight,
-  Activity, ChevronRight, Sparkles,
+  Activity, ChevronRight, QrCode,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -11,10 +12,11 @@ import {
 import { useAuth } from '@/shared/context/AuthContext'
 import { useApp } from '@/shared/context/AppContext'
 import { dashboardStats, weeklyData, categoryDistribution } from '@/data/mockData'
-import type { RequestStatus } from '@/types'
+import type { RequestStatus, CheckInToken } from '@/types'
 import Card from '@/shared/ui/Card'
 import Badge from '@/shared/ui/Badge'
 import Button from '@/shared/ui/Button'
+import QuickIntake from './QuickIntake'
 
 const statusVariant = (status: RequestStatus) => {
   if (status === 'submitted' || status === 'reviewed') return 'success' as const
@@ -58,9 +60,14 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth()
+  const { user, org } = useAuth()
   const { requests, activityLogs } = useApp()
   const navigate = useNavigate()
+  const [showQuickIntake, setShowQuickIntake] = useState(false)
+
+  const handleTokenCreated = (token: CheckInToken) => {
+    console.log('Token created:', token.token)
+  }
 
   const pending = requests.filter(r => r.status === 'pending').length
   const completed = requests.filter(r => r.status === 'submitted' || r.status === 'reviewed').length
@@ -109,9 +116,19 @@ export default function DashboardPage() {
             {new Date().toLocaleDateString('en-RW', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
-        <Button variant="primary" icon={<Plus size={16} />} onClick={() => navigate('/dashboard/requests/new')} size="lg">
-          New Request
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
+            icon={<QrCode size={16} />}
+            onClick={() => setShowQuickIntake(true)}
+            size="lg"
+          >
+            Quick Check-In
+          </Button>
+          <Button variant="primary" icon={<Plus size={16} />} onClick={() => navigate('/dashboard/requests/new')} size="lg">
+            New Request
+          </Button>
+        </div>
       </div>
 
       {/* Alert banner if expired requests */}
@@ -357,6 +374,15 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Quick Check-In Modal */}
+      <QuickIntake
+        isOpen={showQuickIntake}
+        onClose={() => setShowQuickIntake(false)}
+        organizationId={org?.id || ''}
+        userId={user?.id || ''}
+        onTokenCreated={handleTokenCreated}
+      />
     </div>
   )
 }

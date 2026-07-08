@@ -3,12 +3,13 @@ import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, Users, FolderOpen, FileText, Activity,
   Bell, Settings, LogOut, Menu, Search, X,
-  CheckSquare, Plus, ChevronDown, Sparkles,
+  CheckSquare, Plus, ChevronDown,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '@/shared/context/AuthContext'
 import { useApp } from '@/shared/context/AppContext'
 import GlobalSearch from './GlobalSearch'
+import { SubscriptionLockout } from '@/features/subscription'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -172,6 +173,7 @@ export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const location = useLocation()
+  const { isSubscriptionValid, refreshSubscription } = useAuth()
 
   const pageInfo = (() => {
     if (location.pathname.startsWith('/dashboard/clients/')) return { title: 'Client Profile' }
@@ -189,6 +191,10 @@ export default function DashboardLayout() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [])
+
+  if (!isSubscriptionValid()) {
+    return <SubscriptionLockout onRetry={refreshSubscription} />
+  }
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-brand-50 via-white to-brand-50/50 overflow-hidden">

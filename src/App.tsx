@@ -10,6 +10,7 @@ import { ActivityLogPage } from '@/features/activity'
 import { NotificationsPage } from '@/features/notifications'
 import { SettingsPage } from '@/features/settings'
 import { SubmissionPage } from '@/features/submission'
+import { CheckInPage } from '@/features/checkin'
 import { DashboardLayout } from '@/shared/components'
 import LandingPage from './pages/LandingPage'
 import NotFoundPage from './pages/NotFoundPage'
@@ -34,6 +35,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/submit/:token" element={<SubmissionPage />} />
+            <Route path="/check-in/:token" element={<CheckInPage />} />
             <Route path="/404" element={<NotFoundPage />} />
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
             <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
