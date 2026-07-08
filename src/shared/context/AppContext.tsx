@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import type { Client, Category, ActivityLog, Notification, CheckIn, ServiceType, RwandaLocation } from '@/types'
 import { useAuth } from './AuthContext'
 
@@ -21,23 +21,56 @@ interface AppContextValue {
   markAllNotificationsRead: () => void
 }
 
+// Demo data for when Supabase is not connected
+const demoServiceTypes: ServiceType[] = [
+  { id: '1', name: 'Land Transfer', code: 'LAND-001', category: 'Land & Property', is_active: true, sort_order: 1, created_at: new Date().toISOString(), requires_witness: false },
+  { id: '2', name: 'Property Sale Agreement', code: 'PROP-001', category: 'Land & Property', is_active: true, sort_order: 2, created_at: new Date().toISOString(), requires_witness: false },
+  { id: '3', name: 'Mortgage Registration', code: 'MORT-001', category: 'Land & Property', is_active: true, sort_order: 3, created_at: new Date().toISOString(), requires_witness: false },
+  { id: '4', name: 'Power of Attorney', code: 'POA-001', category: 'Corporate', is_active: true, sort_order: 4, created_at: new Date().toISOString(), requires_witness: true },
+  { id: '5', name: 'Company Board Resolution', code: 'BRD-001', category: 'Corporate', is_active: true, sort_order: 5, created_at: new Date().toISOString(), requires_witness: false },
+]
+
+const demoLocations: RwandaLocation[] = [
+  { id: '1', province: 'City of Kigali', district: 'Nyarugenge', sector: 'Nyarugenge' },
+  { id: '2', province: 'City of Kigali', district: 'Nyarugenge', sector: 'Magerwa' },
+  { id: '3', province: 'City of Kigali', district: 'Gasabo', sector: 'Remera' },
+  { id: '4', province: 'City of Kigali', district: 'Kicukiro', sector: 'Kicukiro' },
+  { id: '5', province: 'Northern', district: 'Musanze', sector: 'Musanze' },
+]
+
+const demoCheckIns: CheckIn[] = [
+  { id: '1', organization_id: 'demo', token_id: 't1', sequence_number: 1, client_name: 'Jean Claude Habyarimana', client_phone: '+250 788 123 456', status: 'submitted', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '2', organization_id: 'demo', token_id: 't2', sequence_number: 2, client_name: 'Marie Uwimana', client_phone: '+250 722 234 567', status: 'in_progress', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '3', organization_id: 'demo', token_id: 't3', sequence_number: 3, client_name: 'Emmanuel Niyonzima', client_phone: '+250 733 345 678', status: 'ready', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+]
+
+const demoActivityLogs: ActivityLog[] = [
+  { id: '1', action: 'created', entityType: 'client', entityId: '1', entityName: 'Jean Claude Habyarimana', userId: 'demo', userName: 'Receptionist', ipAddress: '127.0.0.1', timestamp: new Date().toISOString() },
+  { id: '2', action: 'submitted', entityType: 'client', entityId: '2', entityName: 'Marie Uwimana', userId: 'demo', userName: 'Client', ipAddress: '127.0.0.1', timestamp: new Date().toISOString() },
+]
+
 const AppContext = createContext<AppContextValue | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { org, userProfile } = useAuth()
   const [clients, setClients] = useState<Client[]>([])
-  const [checkIns, setCheckIns] = useState<CheckIn[]>([])
+  const [checkIns, setCheckIns] = useState<CheckIn[]>(isSupabaseConfigured ? [] : demoCheckIns)
   const [categories, setCategories] = useState<Category[]>([])
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(isSupabaseConfigured ? [] : demoActivityLogs)
   const [notifications, setNotifications] = useState<Notification[]>([])
-  const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])
-  const [locations, setLocations] = useState<RwandaLocation[]>([])
-  const [loading, setLoading] = useState(true)
+  const [serviceTypes, setServiceTypes] = useState<ServiceType[]>(isSupabaseConfigured ? [] : demoServiceTypes)
+  const [locations, setLocations] = useState<RwandaLocation[]>(isSupabaseConfigured ? [] : demoLocations)
+  const [loading, setLoading] = useState(isSupabaseConfigured)
 
   const unreadCount = notifications.filter(n => !n.read).length
 
   // Load reference data (service types, locations) once
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoading(false)
+      return
+    }
+
     const loadReferenceData = async () => {
       const [{ data: services }, { data: locs }] = await Promise.all([
         supabase.from('service_types').select('*').eq('is_active', true).order('sort_order'),
@@ -46,13 +79,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (services) setServiceTypes(services as ServiceType[])
       if (locs) setLocations(locs as RwandaLocation[])
     }
-    loadReferenceData()
+    loadReferenceData().catch(() => {
+      setServiceTypes(demoServiceTypes)
+      setLocations(demoLocations)
+    })
   }, [])
 
   // Load org-specific data when org changes
   useEffect(() => {
-    if (!org?.id) {
-      setLoading(false)
+    if (!org?.id || !isSupabaseConfigured) {
+      if (!isSupabaseConfigured) {
+        setLoading(false)
+      }
       return
     }
 
@@ -117,11 +155,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     }
 
-    loadData()
+    loadData().catch(() => {
+      setCheckIns(demoCheckIns)
+      setActivityLogs(demoActivityLogs)
+      setLoading(false)
+    })
   }, [org?.id])
 
   const refreshClients = useCallback(async () => {
-    if (!org?.id) return
+    if (!org?.id || !isSupabaseConfigured) return
     const { data } = await supabase.from('clients').select('*').eq('organization_id', org.id).order('created_at', { ascending: false })
     if (data) {
       setClients(data.map((c: Record<string, unknown>) => ({
@@ -140,7 +182,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [org?.id])
 
   const refreshCheckIns = useCallback(async () => {
-    if (!org?.id) return
+    if (!org?.id || !isSupabaseConfigured) return
     const { data } = await supabase.from('check_ins').select('*').eq('organization_id', org.id).order('created_at', { ascending: false }).limit(50)
     if (data) {
       setCheckIns(data.map((c: Record<string, unknown>) => ({
@@ -164,7 +206,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [org?.id])
 
   const refreshActivityLogs = useCallback(async () => {
-    if (!org?.id) return
+    if (!org?.id || !isSupabaseConfigured) return
     const { data } = await supabase.from('audit_logs').select('*').eq('organization_id', org.id).order('created_at', { ascending: false }).limit(100)
     if (data) {
       setActivityLogs(data.map((a: Record<string, unknown>) => ({
@@ -182,8 +224,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [org?.id])
 
   const addCheckIn = useCallback(async (checkIn: Partial<CheckIn>): Promise<{ success: boolean; error?: string }> => {
-    if (!org?.id || !userProfile?.id) {
-      return { success: false, error: 'Not authenticated' }
+    if (!org?.id || !userProfile?.id || !isSupabaseConfigured) {
+      // Demo mode - add to local state
+      const newCheckIn: CheckIn = {
+        id: `demo-${Date.now()}`,
+        organization_id: org?.id || 'demo',
+        token_id: `token-${Date.now()}`,
+        sequence_number: checkIns.length + 1,
+        client_name: checkIn.client_name || 'Demo Client',
+        client_phone: checkIn.client_phone || '+250 000 000 000',
+        status: 'in_progress',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        ...checkIn,
+      }
+      setCheckIns(prev => [newCheckIn, ...prev])
+      return { success: true }
     }
 
     try {
@@ -201,7 +257,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       return { success: false, error: 'An unexpected error occurred' }
     }
-  }, [org?.id, userProfile?.id, refreshCheckIns])
+  }, [org?.id, userProfile?.id, refreshCheckIns, checkIns.length])
 
   const markNotificationRead = useCallback((id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))

@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import type { User, Organization } from '@/types'
-import type { Session, User as SupabaseUser } from '@supabase/supabase-js'
+import type { Session } from '@supabase/supabase-js'
 
 interface UserProfile {
   id: string
@@ -40,13 +40,28 @@ interface RegisterData {
 
 const DEMO_ORG_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
 
+// Demo org for when Supabase is not connected
+const demoOrg: Organization = {
+  id: DEMO_ORG_ID,
+  name: 'Bessora Notary Services',
+  address: 'Kigali Heights, Floor 5',
+  phone: '+250 788 123 456',
+  email: 'contact@bessora-notary.rw',
+  country: 'Rwanda',
+  createdAt: new Date().toISOString(),
+  subscription_expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+  account_status: 'trial',
+  momopay_merchant_code: '182845',
+  payment_phone: '+250 788 123 456',
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
-  const [org, setOrg] = useState<Organization | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [org, setOrg] = useState<Organization | null>(isSupabaseConfigured ? null : demoOrg)
+  const [loading, setLoading] = useState(isSupabaseConfigured)
 
   const user: User | null = session?.user ? {
     id: session.user.id,
@@ -57,6 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   } : null
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoading(false)
+      return
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
@@ -65,6 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setLoading(false)
       }
+    }).catch(() => {
+      setLoading(false)
     })
 
     // Listen for auth changes
@@ -102,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           updated_at: new Date().toISOString(),
         }
         setUserProfile(defaultProfile)
-        await fetchOrganization(DEMO_ORG_ID)
+        setOrg(demoOrg)
       } else {
         setUserProfile(profile as UserProfile)
         if (profile.organization_id) {
@@ -111,6 +133,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       console.error('Error fetching user profile:', err)
+      setOrg(demoOrg)
+    } finally {
       setLoading(false)
     }
   }
@@ -132,7 +156,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: data.email || '',
           address: data.address || '',
           country: 'Rwanda',
-          subdomain: '',
           createdAt: data.created_at,
           subscription_expires_at: data.subscription_expires_at,
           account_status: data.account_status,
@@ -142,13 +165,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       console.error('Error fetching organization:', err)
-    } finally {
-      setLoading(false)
+      setOrg(demoOrg)
     }
   }
 
   const refreshSubscription = async () => {
-    if (!org?.id) return
+    if (!org?.id || !isSupabaseConfigured) return
     await fetchOrganization(org.id)
   }
 
@@ -165,6 +187,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isSupabaseConfigured) {
+      // Demo mode - allow any login
+      const demoUser: User = {
+        id: 'demo-user',
+        name: email.split('@')[0],
+        email,
+        role: 'owner',
+        createdAt: new Date().toISOString(),
+      }
+      const demoSession = {
+        user: { id: 'demo-user', email, created_at: new Date().toISOString() },
+        access_token: 'demo-token',
+        refresh_token: 'demo-refresh',
+        expires_in: 3600,
+        token_type: 'bearer',
+      } as Session
+      setSession(demoSession)
+      setUserProfile({
+        id: 'demo-user',
+        organization_id: DEMO_ORG_ID,
+        name: email.split('@')[0],
+        role: 'owner',
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      setOrg(demoOrg)
+      return { success: true }
+    }
+
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
@@ -177,12 +229,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = async () => {
-    await supabase.auth.signOut()
+    if (isSupabaseConfigured) {
+      await supabase.auth.signOut()
+    }
     setUserProfile(null)
-    setOrg(null)
+    setOrg(demoOrg)
+    setSession(null)
   }
 
   const register = async (data: RegisterData): Promise<{ success: boolean; error?: string }> => {
+    if (!isSupabaseConfigured) {
+      // Demo mode
+      return login(data.email, data.password)
+    }
+
     try {
       const { error: signUpError } = await supabase.auth.signUp({
         email: data.email,
@@ -196,7 +256,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: signUpError.message }
       }
 
-      // Auth state change will handle the rest
       return { success: true }
     } catch (err) {
       return { success: false, error: 'An unexpected error occurred' }

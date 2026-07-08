@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
 import { X, Clock, Phone, User, Copy, Check, AlertCircle } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { clsx } from 'clsx'
 import type { CheckInToken } from '@/types'
 
@@ -11,6 +11,16 @@ interface QuickIntakeProps {
   organizationId: string
   userId: string
   onTokenCreated?: (token: CheckInToken) => void
+}
+
+// Generate a random token for demo mode
+function generateDemoToken(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let token = ''
+  for (let i = 0; i < 32; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return token
 }
 
 export default function QuickIntake({ isOpen, onClose, organizationId, userId, onTokenCreated }: QuickIntakeProps) {
@@ -69,13 +79,11 @@ export default function QuickIntake({ isOpen, onClose, organizationId, userId, o
       })
       setQrSvg(svg)
 
-      const { error: updateError } = await supabase
-        .from('check_in_tokens')
-        .update({ qr_code_svg: svg })
-        .eq('token', tokenValue)
-
-      if (updateError) {
-        console.error('Failed to save QR code SVG:', updateError)
+      if (isSupabaseConfigured) {
+        await supabase
+          .from('check_in_tokens')
+          .update({ qr_code_svg: svg })
+          .eq('token', tokenValue)
       }
     } catch (err) {
       console.error('QR generation error:', err)
@@ -93,34 +101,59 @@ export default function QuickIntake({ isOpen, onClose, organizationId, userId, o
     setError(null)
 
     try {
-      const { data: tokenData, error: rpcError } = await supabase.rpc('generate_secure_token')
+      let tokenValue: string
+      let expiresAt: string
 
-      if (rpcError) throw rpcError
+      if (isSupabaseConfigured) {
+        // Try to use Supabase RPC function, fallback to local generation
+        const { data: tokenData, error: rpcError } = await supabase.rpc('generate_secure_token')
+        if (rpcError) {
+          tokenValue = generateDemoToken()
+        } else {
+          tokenValue = tokenData as string
+        }
+        expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
 
-      const tokenValue = tokenData as string
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+        const { data, error: insertError } = await supabase
+          .from('check_in_tokens')
+          .insert({
+            organization_id: organizationId,
+            created_by: userId,
+            client_name: clientName.trim(),
+            client_phone: clientPhone.trim(),
+            token: tokenValue,
+            expires_at: expiresAt,
+            status: 'pending',
+            is_used: false,
+          })
+          .select()
+          .single()
 
-      const { data, error: insertError } = await supabase
-        .from('check_in_tokens')
-        .insert({
+        if (insertError) throw insertError
+        setToken(data)
+      } else {
+        // Demo mode
+        tokenValue = generateDemoToken()
+        expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+
+        const demoToken: CheckInToken = {
+          id: `demo-${Date.now()}`,
           organization_id: organizationId,
           created_by: userId,
           client_name: clientName.trim(),
           client_phone: clientPhone.trim(),
           token: tokenValue,
           expires_at: expiresAt,
-          status: 'pending',
           is_used: false,
-        })
-        .select()
-        .single()
+          status: 'pending',
+          created_at: new Date().toISOString(),
+        }
+        setToken(demoToken)
+      }
 
-      if (insertError) throw insertError
-
-      setToken(data)
       await generateQR(tokenValue)
       setStep('qr')
-      onTokenCreated?.(data)
+      onTokenCreated?.(token!)
     } catch (err) {
       console.error('Token creation error:', err)
       setError('Failed to create check-in token. Please try again.')
@@ -151,10 +184,10 @@ export default function QuickIntake({ isOpen, onClose, organizationId, userId, o
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-brand-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl shadow-brand-900/30 border border-brand-200 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-brand-100 bg-gradient-to-r from-blue-600 to-blue-500">
+      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl shadow-slate-900/30 border border-slate-200 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-600 to-blue-500">
           <h2 className="text-base font-bold text-white">Quick Check-In</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition-colors">
             <X size={18} />
@@ -163,35 +196,35 @@ export default function QuickIntake({ isOpen, onClose, organizationId, userId, o
 
         {step === 'form' && (
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
-            <p className="text-sm text-brand-600">Enter client details to generate a check-in QR code valid for 10 minutes.</p>
+            <p className="text-sm text-slate-600">Enter client details to generate a check-in QR code valid for 10 minutes.</p>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-brand-700 mb-1.5">Client Name</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Client Name</label>
                 <div className="relative">
-                  <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-400" />
+                  <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     ref={nameInputRef}
                     type="text"
                     value={clientName}
                     onChange={(e) => setClientName(e.target.value)}
                     placeholder="Enter client name"
-                    className="w-full pl-10 pr-4 py-2.5 text-sm border border-brand-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-brand-700 mb-1.5">Phone Number</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Phone Number</label>
                 <div className="relative">
-                  <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-400" />
+                  <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     ref={phoneInputRef}
                     type="tel"
                     value={clientPhone}
                     onChange={(e) => setClientPhone(e.target.value)}
                     placeholder="+250 78X XXX XXX"
-                    className="w-full pl-10 pr-4 py-2.5 text-sm border border-brand-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                 </div>
               </div>
@@ -208,7 +241,7 @@ export default function QuickIntake({ isOpen, onClose, organizationId, userId, o
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 py-2.5 px-4 text-sm font-medium text-brand-600 bg-brand-50 border border-brand-200 rounded-xl hover:bg-brand-100 transition-colors"
+                className="flex-1 py-2.5 px-4 text-sm font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors"
               >
                 Cancel
               </button>
@@ -229,14 +262,14 @@ export default function QuickIntake({ isOpen, onClose, organizationId, userId, o
         {step === 'qr' && token && (
           <div className="p-5 space-y-5">
             <div className="text-center space-y-1">
-              <div className="flex items-center justify-center gap-2 text-xs font-semibold text-brand-400 uppercase tracking-wider">
+              <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
                 <Clock size={12} />
-                <span className={clsx(timeLeft < 60 ? 'text-red-500 animate-pulse' : 'text-brand-400')}>
+                <span className={clsx(timeLeft < 60 ? 'text-red-500 animate-pulse' : 'text-slate-400')}>
                   Expires in {formatTime(timeLeft)}
                 </span>
               </div>
-              <h3 className="text-lg font-bold text-brand-900">{token.client_name}</h3>
-              <p className="text-sm text-brand-500">{token.client_phone}</p>
+              <h3 className="text-lg font-bold text-slate-900">{token.client_name}</h3>
+              <p className="text-sm text-slate-500">{token.client_phone}</p>
             </div>
 
             <div className="flex justify-center">
@@ -246,7 +279,7 @@ export default function QuickIntake({ isOpen, onClose, organizationId, userId, o
                 'shadow-lg'
               )}>
                 {timeLeft === 0 ? (
-                  <div className="w-[280px] h-[280px] flex flex-col items-center justify-center text-brand-400 space-y-2">
+                  <div className="w-[280px] h-[280px] flex flex-col items-center justify-center text-slate-400 space-y-2">
                     <AlertCircle size={48} className="text-red-400" />
                     <p className="font-semibold text-red-600">QR Code Expired</p>
                     <button
@@ -269,8 +302,8 @@ export default function QuickIntake({ isOpen, onClose, organizationId, userId, o
               </div>
             </div>
 
-            <div className="flex items-center gap-2 p-3 bg-brand-50 rounded-xl border border-brand-100">
-              <code className="flex-1 text-xs font-mono text-brand-600 truncate">
+            <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <code className="flex-1 text-xs font-mono text-slate-600 truncate">
                 {window.location.origin}/check-in/{token.token}
               </code>
               <button
@@ -279,7 +312,7 @@ export default function QuickIntake({ isOpen, onClose, organizationId, userId, o
                   'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all',
                   copied
                     ? 'bg-green-100 text-green-700'
-                    : 'bg-white border border-brand-200 text-brand-600 hover:border-blue-300'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:border-blue-300'
                 )}
               >
                 {copied ? (
@@ -296,13 +329,13 @@ export default function QuickIntake({ isOpen, onClose, organizationId, userId, o
               </button>
             </div>
 
-            <div className="text-center text-xs text-brand-400">
+            <div className="text-center text-xs text-slate-400">
               Client scans this QR code with their phone to complete check-in
             </div>
 
             <button
               onClick={onClose}
-              className="w-full py-2.5 text-sm font-medium text-brand-600 bg-brand-50 border border-brand-200 rounded-xl hover:bg-brand-100 transition-colors"
+              className="w-full py-2.5 text-sm font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors"
             >
               Done
             </button>

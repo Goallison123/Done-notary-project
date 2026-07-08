@@ -1,9 +1,27 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { Timer, AlertCircle, CheckCircle2, User, Phone, CreditCard, MapPin, FileText, Pen, Loader2 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { useParams } from 'react-router-dom'
+import { Timer, AlertCircle, CheckCircle2, CreditCard, MapPin, FileText, Pen, Loader2 } from 'lucide-react'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { clsx } from 'clsx'
 import type { CheckInToken, ServiceType, RwandaLocation } from '@/types'
+
+// Demo data for when Supabase is not connected
+const demoServices: ServiceType[] = [
+  { id: '1', name: 'Land Transfer', code: 'LAND-001', category: 'Land & Property', is_active: true, sort_order: 1, created_at: new Date().toISOString(), requires_witness: false },
+  { id: '2', name: 'Property Sale Agreement', code: 'PROP-001', category: 'Land & Property', is_active: true, sort_order: 2, created_at: new Date().toISOString(), requires_witness: false },
+  { id: '3', name: 'Mortgage Registration', code: 'MORT-001', category: 'Land & Property', is_active: true, sort_order: 3, created_at: new Date().toISOString(), requires_witness: false },
+  { id: '4', name: 'Power of Attorney', code: 'POA-001', category: 'Corporate', is_active: true, sort_order: 4, created_at: new Date().toISOString(), requires_witness: true },
+  { id: '5', name: 'Company Board Resolution', code: 'BRD-001', category: 'Corporate', is_active: true, sort_order: 5, created_at: new Date().toISOString(), requires_witness: false },
+  { id: '6', name: 'Affidavit', code: 'AFF-001', category: 'Personal', is_active: true, sort_order: 6, created_at: new Date().toISOString(), requires_witness: false },
+]
+
+const demoLocations: RwandaLocation[] = [
+  { id: '1', province: 'City of Kigali', district: 'Nyarugenge', sector: 'Nyarugenge' },
+  { id: '2', province: 'City of Kigali', district: 'Nyarugenge', sector: 'Magerwa' },
+  { id: '3', province: 'City of Kigali', district: 'Gasabo', sector: 'Remera' },
+  { id: '4', province: 'City of Kigali', district: 'Kicukiro', sector: 'Kicukiro' },
+  { id: '5', province: 'Northern', district: 'Musanze', sector: 'Musanze' },
+]
 
 declare global {
   interface Window {
@@ -13,19 +31,20 @@ declare global {
 
 export default function CheckInPage() {
   const { token } = useParams<{ token: string }>()
-  const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [tokenData, setTokenData] = useState<CheckInToken | null>(null)
   const [expired, setExpired] = useState(false)
   const [used, setUsed] = useState(false)
+  const [success, setSuccess] = useState(false)
 
   const [step, setStep] = useState(1)
-  const [services, setServices] = useState<ServiceType[]>([])
-  const [locations, setLocations] = useState<RwandaLocation[]>([])
+  const [services, setServices] = useState<ServiceType[]>(isSupabaseConfigured ? [] : demoServices)
+  const [locations, setLocations] = useState<RwandaLocation[]>(isSupabaseConfigured ? [] : demoLocations)
 
   const [nationalId, setNationalId] = useState('')
+  const [nationalIdError, setNationalIdError] = useState('')
   const [selectedService, setSelectedService] = useState('')
   const [selectedProvince, setSelectedProvince] = useState('')
   const [selectedDistrict, setSelectedDistrict] = useState('')
@@ -44,52 +63,63 @@ export default function CheckInPage() {
   const filteredSectors = locations.filter(l => l.district === selectedDistrict)
 
   useEffect(() => {
-    const fetchToken = async () => {
-      if (!token) return
+    const fetchData = async () => {
+      if (isSupabaseConfigured && token) {
+        const { data, error } = await supabase
+          .from('check_in_tokens')
+          .select('*')
+          .eq('token', token)
+          .single()
 
-      const { data, error } = await supabase
-        .from('check_in_tokens')
-        .select('*')
-        .eq('token', token)
-        .single()
+        if (error || !data) {
+          setExpired(true)
+          setLoading(false)
+          return
+        }
 
-      if (error || !data) {
-        setExpired(true)
-        setLoading(false)
-        return
-      }
+        const isExpired = new Date(data.expires_at) < new Date()
+        if (isExpired) {
+          setExpired(true)
+          setTokenData(data)
+          setLoading(false)
+          return
+        }
 
-      const isExpired = new Date(data.expires_at) < new Date()
-      if (isExpired) {
-        setExpired(true)
+        if (data.is_used) {
+          setUsed(true)
+          setTokenData(data)
+          setLoading(false)
+          return
+        }
+
         setTokenData(data)
-        setLoading(false)
-        return
-      }
 
-      if (data.is_used) {
-        setUsed(true)
-        setTokenData(data)
-        setLoading(false)
-        return
-      }
+        const [{ data: servicesData }, { data: locationsData }] = await Promise.all([
+          supabase.from('service_types').select('*').eq('is_active', true).order('sort_order'),
+          supabase.from('rwanda_locations').select('*'),
+        ])
 
-      setTokenData(data)
+        if (servicesData) setServices(servicesData)
+        if (locationsData) setLocations(locationsData)
+      } else {
+        // Demo mode - create a fake token
+        setTokenData({
+          id: 'demo-token',
+          organization_id: 'demo-org',
+          created_by: 'demo-user',
+          client_name: 'Demo Client',
+          client_phone: '+250 788 000 000',
+          token: token || 'demo',
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          is_used: false,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+        })
+      }
       setLoading(false)
     }
 
-    const fetchReferenceData = async () => {
-      const [{ data: servicesData }, { data: locationsData }] = await Promise.all([
-        supabase.from('service_types').select('*').eq('is_active', true).order('sort_order'),
-        supabase.from('rwanda_locations').select('*'),
-      ])
-
-      if (servicesData) setServices(servicesData)
-      if (locationsData) setLocations(locationsData)
-    }
-
-    fetchToken()
-    fetchReferenceData()
+    fetchData()
   }, [token])
 
   useEffect(() => {
@@ -165,71 +195,70 @@ export default function CheckInPage() {
   }
 
   const validateNationalId = (id: string) => {
+    // Rwanda national ID: 16 digits, starts with 1 or 2
     const regex = /^[12]\d{15}$/
     return regex.test(id)
   }
 
-  const handleSubmit = async () => {
-    if (!tokenData || !selectedService || !nationalId || !selectedProvince || !selectedDistrict || !selectedSector || !signature || !agreed) {
-      return
+  const handleNationalIdChange = (value: string) => {
+    const cleaned = value.replace(/\D/g, '').slice(0, 16)
+    setNationalId(cleaned)
+    if (cleaned.length === 16 && !validateNationalId(cleaned)) {
+      setNationalIdError('National ID must start with 1 (male) or 2 (female)')
+    } else if (cleaned.length > 0 && cleaned.length < 16) {
+      setNationalIdError(`Enter 16 digits (${cleaned.length}/16)`)
+    } else {
+      setNationalIdError('')
     }
+  }
 
-    if (!validateNationalId(nationalId)) {
-      return
-    }
+  const canProceedStep1 = nationalId.length === 16 && validateNationalId(nationalId)
+  const canProceedStep2 = selectedService && selectedProvince && selectedDistrict && selectedSector
+  const canSubmit = signature && agreed
+
+  const handleSubmit = async () => {
+    if (!tokenData || !canSubmit) return
 
     setSubmitting(true)
 
     try {
-      const { data: sequenceData } = await supabase.rpc('get_next_sequence', {
-        p_org_id: tokenData.organization_id,
-      })
+      if (isSupabaseConfigured) {
+        // Insert check-in record
+        const { error: checkInError } = await supabase.from('check_ins').insert({
+          organization_id: tokenData.organization_id,
+          token_id: tokenData.id,
+          national_id: nationalId,
+          client_name: tokenData.client_name,
+          client_phone: tokenData.client_phone,
+          service_type_id: selectedService,
+          location_id: locations.find(l => l.sector === selectedSector)?.id,
+          signature_svg: signature,
+          status: 'submitted',
+        })
 
-      const sequenceNumber = sequenceData as number
+        if (checkInError) throw checkInError
 
-      const { error: checkInError } = await supabase.from('check_ins').insert({
-        organization_id: tokenData.organization_id,
-        token_id: tokenData.id,
-        sequence_number: sequenceNumber,
-        client_name: tokenData.client_name,
-        client_phone: tokenData.client_phone,
-        client_national_id: nationalId,
-        service_type_id: selectedService,
-        location_id: locations.find(l => l.sector === selectedSector)?.id,
-        purpose_of_visit: purpose,
-        signature_svg: signature,
-        status: 'submitted',
-        form_data: {
-          nationalId,
-          serviceTypeId: selectedService,
-          purpose,
-          location: { province: selectedProvince, district: selectedDistrict, sector: selectedSector },
-        },
-      })
+        // Mark token as used
+        await supabase
+          .from('check_in_tokens')
+          .update({ is_used: true, status: 'completed' })
+          .eq('id', tokenData.id)
+      }
 
-      if (checkInError) throw checkInError
-
-      await supabase
-        .from('check_in_tokens')
-        .update({ is_used: true, status: 'completed' })
-        .eq('id', tokenData.id)
-
-      setStep(4)
+      setSuccess(true)
     } catch (err) {
-      console.error('Check-in submission error:', err)
+      console.error('Submission error:', err)
     } finally {
       setSubmitting(false)
     }
   }
 
-  const timeRemaining = tokenData ? Math.max(0, Math.floor((new Date(tokenData.expires_at).getTime() - Date.now()) / 1000)) : 0
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center p-4">
         <div className="text-center space-y-4">
-          <Loader2 size={48} className="animate-spin text-blue-600 mx-auto" />
-          <p className="text-brand-600">Loading check-in form...</p>
+          <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto" />
+          <p className="text-slate-600">Loading check-in form...</p>
         </div>
       </div>
     )
@@ -237,15 +266,16 @@ export default function CheckInPage() {
 
   if (expired) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-red-200 p-8 text-center space-y-4">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-white flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-red-200 p-8 text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <Timer size={32} className="text-red-500" />
           </div>
-          <h1 className="text-xl font-bold text-brand-900">QR Code Expired</h1>
-          <p className="text-brand-600">
-            This check-in link has expired. Please ask the receptionist for a new QR code.
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">QR Code Expired</h1>
+          <p className="text-slate-600 mb-6">This check-in link is no longer valid. Please ask the receptionist for a new QR code.</p>
+          {tokenData && (
+            <p className="text-sm text-slate-400">Client: {tokenData.client_name}</p>
+          )}
         </div>
       </div>
     )
@@ -253,100 +283,106 @@ export default function CheckInPage() {
 
   if (used) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-teal-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-green-200 p-8 text-center space-y-4">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-white flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-amber-200 p-8 text-center">
+          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <AlertCircle size={32} className="text-amber-500" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Already Used</h1>
+          <p className="text-slate-600">This check-in link has already been completed.</p>
+          {tokenData && (
+            <p className="text-sm text-slate-400 mt-4">Client: {tokenData.client_name}</p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-white flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-green-200 p-8 text-center">
+          <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 size={32} className="text-green-500" />
           </div>
-          <h1 className="text-xl font-bold text-brand-900">Already Checked In</h1>
-          <p className="text-brand-600">
-            You have already completed check-in. Please wait for your number to be called.
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Check-In Complete</h1>
+          <p className="text-slate-600 mb-6">Thank you! Your information has been recorded. Please wait in the waiting area.</p>
+          {tokenData && (
+            <div className="bg-slate-50 rounded-xl p-4">
+              <p className="text-sm text-slate-500">Queue Number</p>
+              <p className="text-3xl font-bold text-slate-900 mt-1">#{1 + Math.floor(Math.random() * 20)}</p>
+            </div>
+          )}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50">
-      <div className="max-w-lg mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-blue-500/30">
-            <FileText size={28} className="text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-brand-900 mt-4 tracking-tight">Client Check-In</h1>
-          <p className="text-brand-600 mt-1">Complete your registration</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white">
+        <div className="max-w-lg mx-auto px-4 py-8 text-center">
+          <h1 className="text-xl font-bold">Client Check-In</h1>
           {tokenData && (
-            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-sm text-blue-700">
-              <Timer size={14} />
-              <span className="font-mono font-semibold">
-                {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')} remaining
-              </span>
-            </div>
+            <p className="text-blue-100 text-sm mt-1">Welcome, {tokenData.client_name}</p>
           )}
         </div>
+      </div>
 
-        {/* Progress */}
-        <div className="flex items-center justify-center gap-2 mb-8">
+      {/* Progress */}
+      <div className="max-w-lg mx-auto px-4 py-6">
+        <div className="flex items-center justify-between mb-8">
           {[1, 2, 3].map(s => (
-            <div key={s} className="flex items-center gap-1">
+            <div key={s} className="flex items-center">
               <div className={clsx(
-                'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all',
-                step > s ? 'bg-green-500 text-white' :
-                step === s ? 'bg-blue-600 text-white' : 'bg-brand-100 text-brand-400'
+                'w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all',
+                step >= s ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'
               )}>
-                {step > s ? <CheckCircle2 size={16} /> : s}
+                {s}
               </div>
               {s < 3 && (
-                <div className={clsx('w-8 h-0.5', step > s ? 'bg-green-500' : 'bg-brand-200')} />
+                <div className={clsx(
+                  'w-8 h-1 mx-1',
+                  step > s ? 'bg-blue-600' : 'bg-slate-200'
+                )} />
               )}
             </div>
           ))}
         </div>
 
-        {/* Step 1: Personal Info */}
+        {/* Step 1: National ID */}
         {step === 1 && (
-          <div className="bg-white rounded-2xl shadow-lg border border-brand-200 p-6 space-y-5">
-            <div className="text-center pb-4 border-b border-brand-100">
-              <p className="text-sm text-brand-500">Checking in as</p>
-              <h2 className="text-lg font-bold text-brand-900">{tokenData?.client_name}</h2>
-              <p className="text-sm text-brand-600">{tokenData?.client_phone}</p>
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 mb-1">National ID</h2>
+              <p className="text-sm text-slate-500">Enter your 16-digit Rwanda National ID</p>
             </div>
 
             <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-brand-700 mb-2">
-                <CreditCard size={14} />
-                National ID Number
-              </label>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Rwanda National ID</label>
               <input
                 type="text"
                 value={nationalId}
-                onChange={(e) => setNationalId(e.target.value.replace(/\D/g, '').slice(0, 16))}
-                placeholder="16-digit national ID"
+                onChange={(e) => handleNationalIdChange(e.target.value)}
+                placeholder="1199901234567890"
                 className={clsx(
-                  'w-full px-4 py-3 rounded-xl border text-sm transition-all',
-                  nationalId && !validateNationalId(nationalId)
-                    ? 'border-red-300 focus:ring-2 focus:ring-red-500'
-                    : 'border-brand-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                  'w-full px-4 py-3 text-lg font-mono text-center border-2 rounded-xl focus:outline-none transition-all',
+                  nationalIdError ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'
                 )}
               />
-              {nationalId && !validateNationalId(nationalId) && (
-                <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-                  <AlertCircle size={12} />
-                  National ID must be 16 digits starting with 1 or 2
-                </p>
+              {nationalIdError && (
+                <p className="text-red-500 text-sm mt-2">{nationalIdError}</p>
               )}
+              <p className="text-xs text-slate-400 mt-2">16-digit number starting with 1 (male) or 2 (female)</p>
             </div>
 
             <button
               onClick={() => setStep(2)}
-              disabled={!validateNationalId(nationalId)}
+              disabled={!canProceedStep1}
               className={clsx(
-                'w-full py-3.5 rounded-xl font-semibold text-white transition-all',
-                validateNationalId(nationalId)
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 shadow-lg shadow-blue-500/30'
-                  : 'bg-brand-300 cursor-not-allowed'
+                'w-full py-4 rounded-xl text-white font-semibold text-lg transition-all',
+                canProceedStep1 ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-300 cursor-not-allowed'
               )}
             >
               Continue
@@ -356,99 +392,84 @@ export default function CheckInPage() {
 
         {/* Step 2: Service & Location */}
         {step === 2 && (
-          <div className="bg-white rounded-2xl shadow-lg border border-brand-200 p-6 space-y-5">
+          <div className="space-y-6">
             <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-brand-700 mb-2">
-                <FileText size={14} />
-                Purpose of Visit
-              </label>
-              <select
-                value={selectedService}
-                onChange={(e) => setSelectedService(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-brand-200 text-sm focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select a service</option>
-                {services.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} {s.name_kinyarwanda ? `(${s.name_kinyarwanda})` : ''}
-                  </option>
-                ))}
-              </select>
+              <h2 className="text-lg font-bold text-slate-900 mb-1">Service & Location</h2>
+              <p className="text-sm text-slate-500">Select your service and address</p>
             </div>
 
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-brand-700 mb-2">
-                <MapPin size={14} />
-                Location
-              </label>
-              <div className="space-y-2">
-                <select
-                  value={selectedProvince}
-                  onChange={(e) => { setSelectedProvince(e.target.value); setSelectedDistrict(''); setSelectedSector('') }}
-                  className="w-full px-4 py-3 rounded-xl border border-brand-200 text-sm"
-                >
-                  <option value="">Province</option>
-                  {provinces.map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Service Type</label>
+                <div className="relative">
+                  <FileText size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <select
+                    value={selectedService}
+                    onChange={(e) => setSelectedService(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">Select service...</option>
+                    {services.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
-                {selectedProvince && (
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Province</label>
+                <div className="relative">
+                  <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <select
+                    value={selectedProvince}
+                    onChange={(e) => { setSelectedProvince(e.target.value); setSelectedDistrict(''); setSelectedSector('') }}
+                    className="w-full pl-10 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">Select province...</option>
+                    {provinces.map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">District</label>
                   <select
                     value={selectedDistrict}
                     onChange={(e) => { setSelectedDistrict(e.target.value); setSelectedSector('') }}
-                    className="w-full px-4 py-3 rounded-xl border border-brand-200 text-sm"
+                    disabled={!selectedProvince}
+                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none disabled:opacity-50"
                   >
-                    <option value="">District</option>
+                    <option value="">Select...</option>
                     {uniqueDistricts.map(d => (
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
-                )}
-
-                {selectedDistrict && (
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Sector</label>
                   <select
                     value={selectedSector}
                     onChange={(e) => setSelectedSector(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-brand-200 text-sm"
+                    disabled={!selectedDistrict}
+                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none disabled:opacity-50"
                   >
-                    <option value="">Sector</option>
+                    <option value="">Select...</option>
                     {filteredSectors.map(s => (
                       <option key={s.id} value={s.sector}>{s.sector}</option>
                     ))}
                   </select>
-                )}
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="text-sm font-semibold text-brand-700 mb-2 block">
-                Additional Notes (Optional)
-              </label>
-              <textarea
-                value={purpose}
-                onChange={(e) => setPurpose(e.target.value)}
-                rows={3}
-                placeholder="Any additional details about your visit..."
-                className="w-full px-4 py-3 rounded-xl border border-brand-200 text-sm resize-none"
-              />
-            </div>
-
-            <div className="flex gap-3">
               <button
-                onClick={() => setStep(1)}
-                className="flex-1 py-3 rounded-xl border border-brand-200 font-medium text-brand-600 hover:bg-brand-50"
-              >
-                Back
-              </button>
-              <button
-                onClick={() => { saveSignature(); setStep(3); }}
-                disabled={!selectedService || !selectedSector}
+                onClick={() => setStep(3)}
+                disabled={!canProceedStep2}
                 className={clsx(
-                  'flex-1 py-3 rounded-xl font-semibold text-white transition-all',
-                  selectedService && selectedSector
-                    ? 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 shadow-lg shadow-blue-500/30'
-                    : 'bg-brand-300 cursor-not-allowed'
+                  'w-full py-4 rounded-xl text-white font-semibold text-lg transition-all',
+                  canProceedStep2 ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-300 cursor-not-allowed'
                 )}
               >
                 Continue
@@ -459,99 +480,79 @@ export default function CheckInPage() {
 
         {/* Step 3: Signature */}
         {step === 3 && (
-          <div className="bg-white rounded-2xl shadow-lg border border-brand-200 p-6 space-y-5">
+          <div className="space-y-6">
             <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-brand-700 mb-2">
-                <Pen size={14} />
-                Digital Signature
-              </label>
-              <div className="border border-brand-200 rounded-xl overflow-hidden bg-brand-50">
-                <canvas
-                  ref={canvasRef}
-                  width={400}
-                  height={200}
-                  className="w-full touch-none cursor-crosshair"
-                  onMouseDown={startDrawing}
-                  onMouseMove={draw}
-                  onMouseUp={stopDrawing}
-                  onMouseLeave={stopDrawing}
-                  onTouchStart={startDrawing}
-                  onTouchMove={draw}
-                  onTouchEnd={stopDrawing}
-                />
-              </div>
+              <h2 className="text-lg font-bold text-slate-900 mb-1">Signature</h2>
+              <p className="text-sm text-slate-500">Please sign below using your finger</p>
+            </div>
+
+            <div className="border-2 border-slate-200 rounded-xl overflow-hidden bg-white">
+              <canvas
+                ref={canvasRef}
+                width={400}
+                height={200}
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
+                onTouchStart={startDrawing}
+                onTouchMove={draw}
+                onTouchEnd={stopDrawing}
+                className="w-full touch-none cursor-crosshair"
+              />
+            </div>
+
+            <div className="flex gap-3">
               <button
                 onClick={clearSignature}
-                className="mt-2 text-sm text-blue-600 hover:underline"
+                className="flex-1 py-3 border-2 border-slate-200 rounded-xl text-slate-600 font-semibold"
               >
-                Clear signature
+                Clear
+              </button>
+              <button
+                onClick={saveSignature}
+                className="flex-1 py-3 bg-slate-100 rounded-xl text-slate-700 font-semibold"
+              >
+                Confirm Signature
               </button>
             </div>
 
-            <label className="flex items-start gap-3 cursor-pointer">
+            {signature && (
+              <p className="text-green-600 text-sm text-center">Signature captured</p>
+            )}
+
+            <label className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl cursor-pointer">
               <input
                 type="checkbox"
                 checked={agreed}
                 onChange={(e) => setAgreed(e.target.checked)}
-                className="mt-1 w-5 h-5 rounded border-brand-300 text-blue-600 focus:ring-blue-500"
+                className="mt-0.5 w-5 h-5 rounded"
               />
-              <span className="text-sm text-brand-600">
-                I confirm that the information provided is accurate and I agree to the terms of service as per Rwandan notarial law (Law Nº 18/2010).
-              </span>
+              <p className="text-sm text-slate-600">
+                I consent to my data being processed for the sole purpose of notary check-in compliance with Rwanda's data protection law.
+              </p>
             </label>
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => setStep(2)}
-                className="flex-1 py-3 rounded-xl border border-brand-200 font-medium text-brand-600 hover:bg-brand-50"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={!signature || !agreed || submitting}
-                className={clsx(
-                  'flex-1 py-3 rounded-xl font-semibold text-white transition-all flex items-center justify-center gap-2',
-                  signature && agreed && !submitting
-                    ? 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 shadow-lg shadow-green-500/30'
-                    : 'bg-brand-300 cursor-not-allowed'
-                )}
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 size={18} />
-                    Submit Check-In
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 4: Success */}
-        {step === 4 && (
-          <div className="bg-white rounded-2xl shadow-lg border border-green-200 p-8 text-center space-y-5">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-              <CheckCircle2 size={40} className="text-green-500" />
-            </div>
-            <h2 className="text-2xl font-bold text-brand-900">Check-In Complete!</h2>
-            <p className="text-brand-600">
-              You have been successfully registered. Please wait for your number to be called.
-            </p>
-            <div className="py-6 bg-green-50 rounded-2xl border border-green-200">
-              <p className="text-sm text-green-700 font-medium">Your Queue Number</p>
-              <p className="text-5xl font-extrabold text-green-600 font-mono mt-2">
-                #{Math.floor(Math.random() * 100).toString().padStart(3, '0')}
-              </p>
-            </div>
-            <p className="text-xs text-brand-400">
-              Keep this page open. You will be notified when it's your turn.
-            </p>
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit || submitting}
+              className={clsx(
+                'w-full py-4 rounded-xl text-white font-semibold text-lg transition-all flex items-center justify-center gap-2',
+                canSubmit && !submitting ? 'bg-green-600 hover:bg-green-700' : 'bg-slate-300 cursor-not-allowed'
+              )}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={20} />
+                  Complete Check-In
+                </>
+              )}
+            </button>
           </div>
         )}
       </div>
