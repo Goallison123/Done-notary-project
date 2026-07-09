@@ -1,67 +1,151 @@
-import { useState } from 'react'
-import { Building, Users, Shield, Bell, Database, Palette, Save, Plus, Trash2, CheckCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Building, Users, Shield, Bell, Database, Save, Plus, CheckCircle, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '@/shared/context/AuthContext'
-import { mockUsers } from '@/data/mockData'
-import Button from '@/shared/ui/Button'
-import Input from '@/shared/ui/Input'
-import Select from '@/shared/ui/Select'
-import Card from '@/shared/ui/Card'
-import Badge from '@/shared/ui/Badge'
+import type { Organization } from '@/types'
 
 const tabs = [
   { id: 'org', label: 'Organization', icon: Building },
+  { id: 'location', label: 'Location', icon: Building },
   { id: 'users', label: 'Users & Roles', icon: Users },
   { id: 'security', label: 'Security', icon: Shield },
-  { id: 'sms', label: 'SMS & Notifications', icon: Bell },
-  { id: 'submission', label: 'Submission Rules', icon: Database },
 ]
 
 const roleColors: Record<string, string> = {
-  owner: 'bg-brand-900 text-white',
+  owner: 'bg-slate-900 text-white',
   administrator: 'bg-blue-600 text-white',
-  receptionist: 'bg-teal-100 text-teal-700',
-  reviewer: 'bg-violet-100 text-violet-700',
-  viewer: 'bg-brand-100 text-brand-600',
+  notary: 'bg-teal-100 text-teal-700',
+  receptionist: 'bg-violet-100 text-violet-700',
 }
 
 export default function SettingsPage() {
-  const { org, user } = useAuth()
+  const { org, user, updateOrganization } = useAuth()
   const [activeTab, setActiveTab] = useState('org')
+  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
   const [orgForm, setOrgForm] = useState({
-    name: org?.name || '',
-    email: org?.email || '',
-    phone: org?.phone || '',
-    address: org?.address || '',
-    country: org?.country || 'Rwanda',
-    description: org?.description || '',
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    description: '',
+    website: '',
+    license_number: '',
   })
 
-  const [rules, setRules] = useState({
-    linkExpiration: 7,
-    oneSubmissionOnly: true,
-    allowResubmission: false,
-    requireSignature: true,
-    maxFileSize: 10,
-    smsProvider: 'mock',
+  const [locationForm, setLocationForm] = useState({
+    province: '',
+    district: '',
+    sector: '',
   })
 
-  const handleSave = async () => {
-    await new Promise(r => setTimeout(r, 600))
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+  // Initialize forms when org data loads
+  useEffect(() => {
+    if (org) {
+      setOrgForm({
+        name: org.name || '',
+        email: org.email || '',
+        phone: org.phone || '',
+        address: org.address || '',
+        description: org.description || '',
+        website: org.website || '',
+        license_number: org.license_number || '',
+      })
+      setLocationForm({
+        province: org.province || '',
+        district: org.district || '',
+        sector: org.sector || '',
+      })
+    }
+  }, [org])
+
+  const handleSaveOrg = async () => {
+    setSaving(true)
+    setError(null)
+
+    const result = await updateOrganization({
+      name: orgForm.name,
+      email: orgForm.email,
+      phone: orgForm.phone,
+      address: orgForm.address,
+      description: orgForm.description,
+      website: orgForm.website,
+      license_number: orgForm.license_number,
+    })
+
+    setSaving(false)
+
+    if (result.success) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } else {
+      setError(result.error || 'Failed to save changes')
+    }
+  }
+
+  const handleSaveLocation = async () => {
+    setSaving(true)
+    setError(null)
+
+    const result = await updateOrganization({
+      province: locationForm.province,
+      district: locationForm.district,
+      sector: locationForm.sector,
+    })
+
+    setSaving(false)
+
+    if (result.success) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } else {
+      setError(result.error || 'Failed to save changes')
+    }
+  }
+
+  // Rwanda location options
+  const provinces = [
+    'City of Kigali',
+    'Northern Province',
+    'Southern Province',
+    'Eastern Province',
+    'Western Province',
+  ]
+
+  const districtsByProvince: Record<string, string[]> = {
+    'City of Kigali': ['Nyarugenge', 'Gasabo', 'Kicukiro'],
+    'Northern Province': ['Musanze', 'Gakenke', 'Rulindo', 'Burera', 'Gicumbi'],
+    'Southern Province': ['Huye', 'Nyanza', 'Gisagara', 'Nyamagabe', 'Nyaruguru', 'Muhanga', 'Kamonyi', 'Ruhango'],
+    'Eastern Province': ['Rwamagana', 'Kayonza', 'Nyagatare', 'Gatsibo', 'Bugesera', 'Kirehe', 'Ngoma'],
+    'Western Province': ['Rubavu', 'Rusizi', 'Nyamasheke', 'Karongi', 'Rutsiro', 'Ngororero', 'Rusizi'],
+  }
+
+  const sectorsByDistrict: Record<string, string[]> = {
+    'Nyarugenge': ['Nyarugenge', 'Magerwa', 'Kigali', 'Gitega', 'Kacyiru'],
+    'Gasabo': ['Remera', 'Kacyiru', 'Gisozi', 'Ndera', 'Rusororo', 'Bumbogo'],
+    'Kicukiro': ['Kicukiro', 'Niboye', 'Kagarama', 'Gatenga', 'Gikondo'],
+    'Musanze': ['Muhoza', 'Busogo', 'Cyuve', 'Kimonyi', 'Gacaca'],
+    'Huye': ['Ngoma', 'Matyazo', 'Huye', 'Tumba', 'Mbazi'],
+    'Rwamagana': ['Kigabiro', 'Munyaga', 'Muhazi', 'Gishari'],
+    'Rubavu': ['Rubavu', 'Gisenyi', 'Nyakiliba'],
   }
 
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-extrabold text-brand-900 tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Settings</h1>
-        <p className="text-sm text-brand-500 mt-1">Manage your organization configuration and preferences</p>
+        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Settings</h1>
+        <p className="text-sm text-slate-500 mt-1">Manage your organization configuration</p>
       </div>
 
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       <div className="flex gap-6 flex-col lg:flex-row">
-        {/* Tab Nav */}
         <div className="flex lg:flex-col gap-1.5 lg:w-52 flex-shrink-0 overflow-x-auto lg:overflow-x-visible pb-1 lg:pb-0">
           {tabs.map(tab => (
             <button
@@ -69,7 +153,7 @@ export default function SettingsPage() {
               onClick={() => setActiveTab(tab.id)}
               className={clsx(
                 'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold whitespace-nowrap transition-all',
-                activeTab === tab.id ? 'bg-brand-900 text-white shadow-lg shadow-brand-900/20' : 'text-brand-500 hover:bg-brand-100 hover:text-brand-800',
+                activeTab === tab.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800',
               )}
             >
               <tab.icon size={18} />
@@ -78,200 +162,296 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        {/* Content */}
         <div className="flex-1 min-w-0">
-          {/* Organization */}
           {activeTab === 'org' && (
-            <Card padding="lg" className="bg-white border border-brand-100">
-              <h2 className="text-lg font-bold text-brand-900 mb-6 tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Organization Profile</h2>
+            <div className="bg-white border border-slate-200 rounded-2xl p-6">
+              <h2 className="text-lg font-bold text-slate-900 mb-6">Organization Profile</h2>
+
               <div className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <Input label="Organization Name" value={orgForm.name} onChange={e => setOrgForm(p => ({...p, name: e.target.value}))} required />
-                  <Input label="Email" type="email" value={orgForm.email} onChange={e => setOrgForm(p => ({...p, email: e.target.value}))} required />
-                  <Input label="Phone" value={orgForm.phone} onChange={e => setOrgForm(p => ({...p, phone: e.target.value}))} />
-                  <Select label="Country" value={orgForm.country} onChange={e => setOrgForm(p => ({...p, country: e.target.value}))} options={[
-                    { value: 'Rwanda', label: 'Rwanda' },
-                    { value: 'Kenya', label: 'Kenya' },
-                    { value: 'Uganda', label: 'Uganda' },
-                    { value: 'Tanzania', label: 'Tanzania' },
-                  ]} />
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Organization Name *</label>
+                    <input
+                      type="text"
+                      value={orgForm.name}
+                      onChange={e => setOrgForm(p => ({ ...p, name: e.target.value }))}
+                      className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Email Address *</label>
+                    <input
+                      type="email"
+                      value={orgForm.email}
+                      onChange={e => setOrgForm(p => ({ ...p, email: e.target.value }))}
+                      className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Phone Number</label>
+                    <input
+                      type="tel"
+                      value={orgForm.phone}
+                      onChange={e => setOrgForm(p => ({ ...p, phone: e.target.value }))}
+                      placeholder="+250 7XX XXX XXX"
+                      className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">License Number</label>
+                    <input
+                      type="text"
+                      value={orgForm.license_number}
+                      onChange={e => setOrgForm(p => ({ ...p, license_number: e.target.value }))}
+                      placeholder="Notary License Number"
+                      className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    />
+                  </div>
                 </div>
-                <Input label="Address" value={orgForm.address} onChange={e => setOrgForm(p => ({...p, address: e.target.value}))} />
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-brand-700">Description</label>
-                  <textarea
-                    value={orgForm.description}
-                    onChange={e => setOrgForm(p => ({...p, description: e.target.value}))}
-                    rows={3}
-                    placeholder="Brief description of your organization..."
-                    className="w-full rounded-xl border border-brand-200 bg-white px-4 py-3 text-sm text-brand-900 placeholder:text-brand-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-none"
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Physical Address</label>
+                  <input
+                    type="text"
+                    value={orgForm.address}
+                    onChange={e => setOrgForm(p => ({ ...p, address: e.target.value }))}
+                    placeholder="Street address"
+                    className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Website</label>
+                  <input
+                    type="url"
+                    value={orgForm.website}
+                    onChange={e => setOrgForm(p => ({ ...p, website: e.target.value }))}
+                    placeholder="https://your-website.com"
+                    className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                  <textarea
+                    value={orgForm.description}
+                    onChange={e => setOrgForm(p => ({ ...p, description: e.target.value }))}
+                    rows={3}
+                    placeholder="Brief description of your notary office..."
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none"
+                  />
+                </div>
+
                 <div className="pt-3 flex items-center gap-4">
-                  <Button variant="primary" icon={saved ? <CheckCircle size={16} /> : <Save size={16} />} onClick={handleSave} size="lg">
-                    {saved ? 'Saved!' : 'Save Changes'}
-                  </Button>
-                  {saved && <span className="text-sm text-green-600 font-medium">Changes saved successfully</span>}
+                  <button
+                    onClick={handleSaveOrg}
+                    disabled={saving}
+                    className="flex items-center gap-2 h-11 px-6 bg-slate-900 text-white rounded-xl font-semibold text-sm hover:bg-slate-800 transition-all disabled:opacity-50"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Saving...
+                      </>
+                    ) : saved ? (
+                      <>
+                        <CheckCircle size={16} />
+                        Saved!
+                      </>
+                    ) : (
+                      <>
+                        <Save size={16} />
+                        Save Changes
+                      </>
+                    )}
+                  </button>
+                  {saved && <span className="text-sm text-teal-600 font-medium">Changes saved</span>}
                 </div>
               </div>
-            </Card>
-          )}
-
-          {/* Users */}
-          {activeTab === 'users' && (
-            <div className="space-y-5">
-              <Card padding="none" className="bg-white border border-brand-100 overflow-hidden rounded-2xl">
-                <div className="flex items-center justify-between px-6 py-5 border-b border-brand-100 bg-gradient-to-r from-brand-50 to-white">
-                  <h2 className="text-lg font-bold text-brand-900 tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Team Members</h2>
-                  <Button variant="primary" size="default" icon={<Plus size={16} />}>Invite User</Button>
-                </div>
-                <div className="divide-y divide-brand-50">
-                  {mockUsers.map(u => (
-                    <div key={u.id} className="flex items-center gap-4 px-6 py-4 hover:bg-brand-50 transition-colors">
-                      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-lg shadow-blue-500/20">
-                        {u.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-brand-800">{u.name}</span>
-                          {u.id === user?.id && <span className="text-xs text-brand-400 font-medium">(you)</span>}
-                        </div>
-                        <div className="text-xs text-brand-500 mt-0.5">{u.email}</div>
-                      </div>
-                      <span className={`text-xs font-semibold px-3 py-1 rounded-lg capitalize ${roleColors[u.role]}`}>
-                        {u.role}
-                      </span>
-                      {u.id !== user?.id && (
-                        <button className="p-2 text-brand-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </Card>
             </div>
           )}
 
-          {/* Security */}
+          {activeTab === 'location' && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-6">
+              <h2 className="text-lg font-bold text-slate-900 mb-6">Location Details</h2>
+
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Province</label>
+                    <select
+                      value={locationForm.province}
+                      onChange={e => setLocationForm(p => ({ ...p, province: e.target.value, district: '', sector: '' }))}
+                      className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    >
+                      <option value="">Select province...</option>
+                      {provinces.map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">District</label>
+                    <select
+                      value={locationForm.district}
+                      onChange={e => setLocationForm(p => ({ ...p, district: e.target.value, sector: '' }))}
+                      disabled={!locationForm.province}
+                      className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:opacity-50"
+                    >
+                      <option value="">Select district...</option>
+                      {(districtsByProvince[locationForm.province] || []).map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Sector</label>
+                    <select
+                      value={locationForm.sector}
+                      onChange={e => setLocationForm(p => ({ ...p, sector: e.target.value }))}
+                      disabled={!locationForm.district}
+                      className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:opacity-50"
+                    >
+                      <option value="">Select sector...</option>
+                      {(sectorsByDistrict[locationForm.district] || []).map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="pt-3 flex items-center gap-4">
+                  <button
+                    onClick={handleSaveLocation}
+                    disabled={saving}
+                    className="flex items-center gap-2 h-11 px-6 bg-slate-900 text-white rounded-xl font-semibold text-sm hover:bg-slate-800 transition-all disabled:opacity-50"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Saving...
+                      </>
+                    ) : saved ? (
+                      <>
+                        <CheckCircle size={16} />
+                        Saved!
+                      </>
+                    ) : (
+                      <>
+                        <Save size={16} />
+                        Save Location
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'users' && (
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-slate-50">
+                <h2 className="text-lg font-bold text-slate-900">Team Members</h2>
+                <button
+                  className="flex items-center gap-2 h-9 px-4 bg-slate-900 text-white rounded-xl font-semibold text-sm hover:bg-slate-800 transition-all"
+                >
+                  <Plus size={16} />
+                  Invite User
+                </button>
+              </div>
+
+              <div className="divide-y divide-slate-100">
+                {user && (
+                  <div className="flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors">
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                      {user.name?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-slate-800">{user.name || 'User'}</span>
+                        <span className="text-xs text-slate-400 font-medium">(you)</span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">{user.email}</div>
+                    </div>
+                    <span className={clsx('text-xs font-semibold px-3 py-1.5 rounded-lg capitalize', roleColors[user.role] || roleColors.receptionist)}>
+                      {user.role}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {org && (
+                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
+                  <p className="text-xs text-slate-500">
+                    Organization: <span className="font-semibold text-slate-700">{org.name}</span>
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'security' && (
-            <Card padding="lg" className="bg-white border border-brand-100">
-              <h2 className="text-lg font-bold text-brand-900 mb-6 tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Security Settings</h2>
+            <div className="bg-white border border-slate-200 rounded-2xl p-6">
+              <h2 className="text-lg font-bold text-slate-900 mb-6">Security Settings</h2>
+
               <div className="space-y-6">
-                <div className="p-5 bg-gradient-to-r from-brand-50 to-white rounded-xl border border-brand-100">
+                <div className="p-5 bg-slate-50 rounded-xl border border-slate-200">
                   <div className="flex items-start gap-4">
-                    <div className="p-2.5 bg-blue-100 rounded-xl">
-                      <Shield size={20} className="text-blue-600" />
+                    <div className="p-2.5 bg-teal-100 rounded-xl">
+                      <Shield size={20} className="text-teal-600" />
                     </div>
                     <div className="flex-1">
-                      <div className="text-sm font-semibold text-brand-800">Two-Factor Authentication</div>
-                      <div className="text-sm text-brand-500 mt-1">Add an extra layer of security to your account</div>
+                      <div className="text-sm font-semibold text-slate-800">Two-Factor Authentication</div>
+                      <div className="text-sm text-slate-500 mt-1">Add an extra layer of security to your account</div>
                     </div>
-                    <Badge variant="muted" className="font-semibold">Coming Soon</Badge>
+                    <span className="text-xs font-semibold px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg">
+                      Coming Soon
+                    </span>
                   </div>
                 </div>
+
                 <div>
-                  <h3 className="text-sm font-semibold text-brand-800 mb-4">Change Password</h3>
+                  <h3 className="text-sm font-semibold text-slate-800 mb-4">Change Password</h3>
                   <div className="space-y-4">
-                    <Input label="Current Password" type="password" placeholder="••••••••" />
-                    <Input label="New Password" type="password" placeholder="Min. 8 characters" />
-                    <Input label="Confirm New Password" type="password" placeholder="Re-enter new password" />
-                    <Button variant="primary" icon={<Save size={16} />} onClick={handleSave} size="lg">Update Password</Button>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {/* SMS */}
-          {activeTab === 'sms' && (
-            <Card padding="lg" className="bg-white border border-brand-100">
-              <h2 className="text-lg font-bold text-brand-900 mb-6 tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>SMS Configuration</h2>
-              <div className="space-y-5">
-                <Select
-                  label="SMS Provider"
-                  value={rules.smsProvider}
-                  onChange={e => setRules(p => ({...p, smsProvider: e.target.value}))}
-                  options={[
-                    { value: 'mock', label: 'Mock (Development)' },
-                    { value: 'africastalking', label: "Africa's Talking" },
-                    { value: 'twilio', label: 'Twilio' },
-                  ]}
-                />
-                {rules.smsProvider === 'mock' && (
-                  <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
-                    <Bell size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                    <span>Mock mode is active. SMS messages will be simulated and logged but not actually sent.</span>
-                  </div>
-                )}
-                {rules.smsProvider !== 'mock' && (
-                  <>
-                    <Input label="API Key / Auth Token" type="password" placeholder="Enter your API key" />
-                    <Input label="Sender ID" placeholder="e.g. KGNOTARY" />
-                  </>
-                )}
-                <Button variant="primary" icon={<Save size={16} />} onClick={handleSave} size="lg">Save SMS Config</Button>
-              </div>
-            </Card>
-          )}
-
-          {/* Submission Rules */}
-          {activeTab === 'submission' && (
-            <Card padding="lg" className="bg-white border border-brand-100">
-              <h2 className="text-lg font-bold text-brand-900 mb-6 tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Submission Rules</h2>
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold text-brand-700">Link Expiration (days)</label>
-                    <input
-                      type="number"
-                      value={rules.linkExpiration}
-                      onChange={e => setRules(p => ({...p, linkExpiration: Number(e.target.value)}))}
-                      min={1} max={30}
-                      className="h-12 rounded-xl border border-brand-200 bg-white px-4 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold text-brand-700">Max File Size (MB)</label>
-                    <input
-                      type="number"
-                      value={rules.maxFileSize}
-                      onChange={e => setRules(p => ({...p, maxFileSize: Number(e.target.value)}))}
-                      min={1} max={50}
-                      className="h-12 rounded-xl border border-brand-200 bg-white px-4 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {[
-                    { key: 'oneSubmissionOnly', label: 'One submission only', desc: 'Clients can only submit once per link' },
-                    { key: 'allowResubmission', label: 'Allow resubmission', desc: 'Staff can re-open submitted forms' },
-                    { key: 'requireSignature', label: 'Require signature by default', desc: 'All forms require digital signature unless overridden' },
-                  ].map(rule => (
-                    <div key={rule.key} className="flex items-start gap-4 p-5 border border-brand-200 rounded-xl hover:border-brand-300 transition-colors">
-                      <div className="flex-1">
-                        <div className="text-sm font-semibold text-brand-800">{rule.label}</div>
-                        <div className="text-sm text-brand-500 mt-1">{rule.desc}</div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={rules[rule.key as keyof typeof rules] as boolean}
-                          onChange={e => setRules(p => ({...p, [rule.key]: e.target.checked}))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-brand-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-5 after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all shadow-inner" />
-                      </label>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Current Password</label>
+                      <input
+                        type="password"
+                        placeholder="••••••••"
+                        className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      />
                     </div>
-                  ))}
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">New Password</label>
+                      <input
+                        type="password"
+                        placeholder="Min. 8 characters"
+                        className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Confirm New Password</label>
+                      <input
+                        type="password"
+                        placeholder="Re-enter new password"
+                        className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      />
+                    </div>
+                    <button
+                      className="flex items-center gap-2 h-11 px-6 bg-slate-900 text-white rounded-xl font-semibold text-sm hover:bg-slate-800 transition-all"
+                    >
+                      <Save size={16} />
+                      Update Password
+                    </button>
+                  </div>
                 </div>
-
-                <Button variant="primary" icon={<Save size={16} />} onClick={handleSave} size="lg">
-                  {saved ? 'Saved!' : 'Save Rules'}
-                </Button>
               </div>
-            </Card>
+            </div>
           )}
         </div>
       </div>

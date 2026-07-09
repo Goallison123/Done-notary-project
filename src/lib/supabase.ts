@@ -1,15 +1,21 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+// Support Vercel integration naming AND standard Vite naming
+const supabaseUrl =
+  import.meta.env.VITE_SUPABASE_URL ||
+  import.meta.env.VITE_PUBLIC_SUPABASE_URL ||
+  ''
 
-// Create a fallback client if env vars are missing (for development)
-const fallbackUrl = 'https://placeholder.supabase.co'
-const fallbackKey = 'placeholder-key'
+const supabaseAnonKey =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY ||
+  ''
+
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 
 export const supabase = createClient(
-  supabaseUrl || fallbackUrl,
-  supabaseAnonKey || fallbackKey,
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder',
   {
     auth: {
       persistSession: true,
@@ -18,8 +24,5 @@ export const supabase = createClient(
     },
   }
 )
-
-// Export a flag to check if Supabase is properly configured
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 
 export type { User, Session } from '@supabase/supabase-js'

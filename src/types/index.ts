@@ -1,4 +1,4 @@
-export type UserRole = 'owner' | 'administrator' | 'receptionist' | 'reviewer' | 'viewer'
+export type UserRole = 'owner' | 'administrator' | 'receptionist' | 'notary' | 'reviewer' | 'viewer'
 export type RequestStatus = 'pending' | 'submitted' | 'reviewed' | 'expired' | 'rejected'
 export type FieldType =
   | 'short_text' | 'long_text' | 'number' | 'phone' | 'email'
@@ -23,8 +23,12 @@ export interface Organization {
   phone: string
   email: string
   country: string
+  province?: string
+  district?: string
+  sector?: string
   subdomain?: string
   description?: string
+  website?: string
   createdAt: string
   subscription_expires_at?: string
   trial_started_at?: string
@@ -72,7 +76,11 @@ export interface Client {
   phone: string
   email?: string
   nationalId?: string
+  passportNumber?: string
   address?: string
+  province?: string
+  district?: string
+  sector?: string
   country?: string
   orgId: string
   createdAt: string
@@ -117,8 +125,8 @@ export interface Document {
 
 export interface ActivityLog {
   id: string
-  action: 'created' | 'edited' | 'viewed' | 'submitted' | 'downloaded' | 'expired' | 'deleted' | 'login'
-  entityType: 'request' | 'client' | 'category' | 'document' | 'user' | 'organization'
+  action: 'created' | 'edited' | 'viewed' | 'submitted' | 'downloaded' | 'expired' | 'deleted' | 'login' | 'archived' | 'called'
+  entityType: 'request' | 'client' | 'category' | 'document' | 'user' | 'organization' | 'checkin'
   entityId: string
   entityName: string
   userId: string
@@ -148,9 +156,9 @@ export interface OrgSettings {
   allowedFileTypes: string[]
   smsProvider: 'mock' | 'twilio' | 'africastalking'
   smsApiKey?: string
+  smsSenderId?: string
 }
 
-// Database types from Supabase schema
 export interface ServiceType {
   id: string
   name: string
@@ -180,7 +188,7 @@ export type CheckInProgress = 'in_progress' | 'submitted' | 'signed' | 'ready' |
 export interface CheckInToken {
   id: string
   organization_id: string
-  created_by: string
+  created_by?: string
   client_name: string
   client_phone: string
   token: string
@@ -201,8 +209,12 @@ export interface CheckIn {
   client_email?: string
   client_national_id?: string
   service_type_id?: string
+  service_type_name?: string
   location_id?: string
-  purpose_of_visit?: string
+  location_province?: string
+  location_district?: string
+  location_sector?: string
+  purpose?: string
   form_data?: Record<string, unknown>
   signature_svg?: string
   signature_hash?: string
